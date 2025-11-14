@@ -327,9 +327,6 @@ struct ListView: View {
                     } label: {
                         Label("Claim Unclaimed", systemImage: "envelope.badge")
                     }
-                    NavigationLink(destination: ExportView(items: items)) {
-                        Image(systemName: "square.and.arrow.up")
-                    }
                 }
             }
             .searchable(text: $queryText)
@@ -511,20 +508,20 @@ struct DetailView: View {
 
 struct ExportView: View {
     let items: [Reimbursement]
-    @State private var csvURL: URL? = nil
+    @State private var zipURL: URL? = nil
 
     var body: some View {
         VStack(spacing: 16) {
-            Text("Export all visible items to CSV for easy filing.\nOpen in Numbers/Excel or attach to email.")
+            Text("Export all visible items as a ZIP (CSV + summaries + images).\nOpen in Files or attach to email.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.top)
-            Button(action: makeCSV) {
-                Label("Generate CSV", systemImage: "doc.text")
+            Button(action: makeZIP) {
+                Label("Generate ZIP", systemImage: "archivebox")
             }
-            if let url = csvURL {
-                ShareLink("Share CSV", item: url)
+            if let url = zipURL {
+                ShareLink("Share ZIP", item: url)
             }
             Spacer()
         }
@@ -532,13 +529,28 @@ struct ExportView: View {
         .navigationTitle("Export")
     }
 
-    private func makeCSV() {
+    private func makeZIP() {
+        var files: [(name: String, data: Data)] = []
+        // CSV
         let header = ["id","date","projectCode","note","status","placeName","coordinate","amount"].joined(separator: ",")
         let rows = items.map { $0.csvRow() }
-        let csv = ([header] + rows).joined(separator: "\n")
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("reimbursements.csv")
-        try? csv.data(using: .utf8)?.write(to: url)
-        csvURL = url
+        if let csvData = ([header] + rows).joined(separator: "\n").data(using: .utf8) {
+            files.append(("reimbursements.csv", csvData))
+        }
+        // Per-entry text + images
+        for r in items {
+            let stamp = r.date.formatted(date: .numeric, time: .shortened).replacingOccurrences(of: "/", with: "-")
+            let safeProj = r.projectCode.replacingOccurrences(of: "/", with: "-")
+            if let txt = r.shareText().data(using: .utf8) {
+                files.append(("\(safeProj)-\(stamp)-summary.txt", txt))
+            }
+            if let inv = r.invoiceImageData { files.append(("\(safeProj)-\(stamp)-invoice.jpg", inv)) }
+            if let pay = r.paymentImageData { files.append(("\(safeProj)-\(stamp)-payment.jpg", pay)) }
+        }
+        guard let zipData = ZipBuilder.makeZip(named: "reimbursements.zip", files: files) else { return }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("reimbursements.zip")
+        try? zipData.write(to: url)
+        zipURL = url
     }
 }
 
