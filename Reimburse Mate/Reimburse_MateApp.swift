@@ -13,6 +13,7 @@ import PhotosUI
 import CoreLocation
 import Combine
 import MessageUI
+import Vision
 
 @main
 struct ReimburseMateApp: App {
@@ -175,7 +176,14 @@ struct AddEntryView: View {
                         }
                     }
                     .onChange(of: invoicePhotoItem) { old, newItem in
-                        Task { invoiceImage = try await newItem?.loadUIImageDownscaled() }
+                        Task {
+                            invoiceImage = try await newItem?.loadUIImageDownscaled()
+                            if let img = invoiceImage, amountString.trimmingCharacters(in: .whitespaces).isEmpty {
+                                if let amt = await OCRAmountExtractor.shared.findAmount(in: img) {
+                                    amountString = String(format: "%.2f", amt)
+                                }
+                            }
+                        }
                     }
 
                     if let img = invoiceImage {
@@ -202,7 +210,14 @@ struct AddEntryView: View {
                         }
                     }
                     .onChange(of: paymentPhotoItem) { old, newItem in
-                        Task { paymentImage = try await newItem?.loadUIImageDownscaled() }
+                        Task {
+                            paymentImage = try await newItem?.loadUIImageDownscaled()
+                            if let img = paymentImage, amountString.trimmingCharacters(in: .whitespaces).isEmpty {
+                                if let amt = await OCRAmountExtractor.shared.findAmount(in: img) {
+                                    amountString = String(format: "%.2f", amt)
+                                }
+                            }
+                        }
                     }
 
                     if let img = paymentImage {
@@ -768,6 +783,88 @@ fileprivate enum ZipBuilder {
             return c
         }
     }()
+}
+
+
+// MARK: - OCR Amount Extractor (Vision)
+final class OCRAmountExtractor {
+    static let shared = OCRAmountExtractor()
+    private init() {}
+
+    /// Finds the most likely amount in the given image by OCR + simple heuristics (₹/Rs/INR, totals, etc.).
+    func findAmount(in image: UIImage) async -> Double? {
+        guard let cgImage = image.cgImage else { return nil }
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        if #available(iOS 17.0, *) {
+            request.revision = VNRecognizeTextRequestRevision3
+        }
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        do {
+            try handler.perform([request])
+            let lines: [String] = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+            return Self.extractAmount(from: lines)
+        } catch {
+            return nil
+        }
+    }
+
+    /// Extract amount using India-friendly formats and keywords.
+    private static func extractAmount(from lines: [String]) -> Double? {
+        struct Candidate { let value: Double; let score: Int; let index: Int }
+        var cands: [Candidate] = []
+
+        let numberPattern = #"([0-9][0-9,]*\.?[0-9]{0,2})"#
+        let symbolPattern = #"(?:₹|\b(?i:rs\.?|inr)\b)\s*"#
+        let genericAmountRegex = try! NSRegularExpression(pattern: "\(symbolPattern)\(numberPattern)")
+        let keywordRegex = try! NSRegularExpression(pattern: #"(?i)(grand\s*total|total\s*amount|invoice\s*amount|amount\s*payable|amount|total|paid|payment|txn\s*amount|debit|credited)"#)
+        let totalRegex = try! NSRegularExpression(pattern: #"(?i)(grand\s*total|total\s*amount|total)"#)
+
+        func extractNumbers(from text: String) -> [String] {
+            let ns = text as NSString
+            let range = NSRange(location: 0, length: ns.length)
+            return genericAmountRegex.matches(in: text, range: range).compactMap { m -> String? in
+                guard m.numberOfRanges >= 2 else { return nil }
+                let raw = ns.substring(with: m.range(at: m.numberOfRanges - 1))
+                return raw
+            }
+        }
+        func has(_ regex: NSRegularExpression, in text: String) -> Bool {
+            let ns = text as NSString
+            return regex.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) != nil
+        }
+        func parse(_ s: String) -> Double? {
+            let cleaned = s.replacingOccurrences(of: ",", with: "")
+            return Double(cleaned)
+        }
+
+        for (idx, rawLine) in lines.enumerated() {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { continue }
+            let nums = extractNumbers(from: line)
+            guard !nums.isEmpty else { continue }
+            let hasKeyword = has(keywordRegex, in: line)
+            let hasTotal = has(totalRegex, in: line)
+            for n in nums {
+                if let v = parse(n) {
+                    var score = 0
+                    if hasKeyword { score += 2 }
+                    if hasTotal { score += 2 }
+                    if line.range(of: #"₹|(?i)\brs\.?\b|(?i)\binr\b"#, options: .regularExpression) != nil { score += 1 }
+                    cands.append(Candidate(value: v, score: score, index: idx))
+                }
+            }
+        }
+
+        guard !cands.isEmpty else { return nil }
+        let best = cands.max { lhs, rhs in
+            if lhs.score != rhs.score { return lhs.score < rhs.score }
+            if lhs.value != rhs.value { return lhs.value < rhs.value }
+            return lhs.index < rhs.index
+        }
+        return best?.value
+    }
 }
 
 // MARK: - Mail / Share bridges
