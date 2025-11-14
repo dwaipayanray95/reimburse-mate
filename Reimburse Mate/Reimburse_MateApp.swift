@@ -13,6 +13,8 @@ import PhotosUI
 import CoreLocation
 import Combine
 import MessageUI
+import CoreImage
+import CoreImage.CIFilterBuiltins
 
 @main
 struct ReimburseMateApp: App {
@@ -118,11 +120,16 @@ final class Reimbursement {
 
 struct RootView: View {
     var body: some View {
-        TabView {
-            AddEntryView()
-                .tabItem { Label("Log", systemImage: "plus.square.on.square") }
-            ListView()
-                .tabItem { Label("All", systemImage: "list.bullet.rectangle") }
+        ZStack(alignment: .bottomTrailing) {
+            TabView {
+                AddEntryView()
+                    .tabItem { Label("Log", systemImage: "plus.square.on.square") }
+                ListView()
+                    .tabItem { Label("All", systemImage: "list.bullet.rectangle") }
+            }
+            VersionBadge()
+                .padding(.trailing, 8)
+                .padding(.bottom, 6)
         }
     }
 }
@@ -163,6 +170,9 @@ struct AddEntryView: View {
     @State private var amountString: String = ""
     @State private var isSaving = false
     @State private var showSavedToast = false
+    @State private var showExtras = false
+    @State private var showInvoiceCamera = false
+    @State private var showPaymentCamera = false
 
     var body: some View {
         NavigationStack {
@@ -176,6 +186,12 @@ struct AddEntryView: View {
                     }
                     .onChange(of: invoicePhotoItem) { old, newItem in
                         Task { invoiceImage = try await newItem?.loadUIImageDownscaled() }
+                    }
+
+                    Button {
+                        showInvoiceCamera = true
+                    } label: {
+                        Label("Take invoice photo", systemImage: "camera")
                     }
 
                     if let img = invoiceImage {
@@ -204,6 +220,12 @@ struct AddEntryView: View {
                     }
                     .onChange(of: paymentPhotoItem) { old, newItem in
                         Task { paymentImage = try await newItem?.loadUIImageDownscaled() }
+                    }
+
+                    Button {
+                        showPaymentCamera = true
+                    } label: {
+                        Label("Take payment photo", systemImage: "camera")
                     }
 
                     if let img = paymentImage {
@@ -263,6 +285,25 @@ struct AddEntryView: View {
                 if showSavedToast {
                     ToastView(text: "Saved")
                         .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showExtras = true } label: { Image(systemName: "info.circle") }
+                        .accessibilityLabel("Extras")
+                }
+            }
+            .sheet(isPresented: $showExtras) {
+                ExtrasView()
+            }
+            .sheet(isPresented: $showInvoiceCamera) {
+                CameraPicker { img in
+                    invoiceImage = img
+                }
+            }
+            .sheet(isPresented: $showPaymentCamera) {
+                CameraPicker { img in
+                    paymentImage = img
                 }
             }
         }
@@ -543,6 +584,127 @@ struct DetailView: View {
     private func toggleStatus() { r.status = (r.status == .claimed ? .unclaimed : .claimed); try? context.save() }
 }
 
+// MARK: - Extras (Changelog / Donate / Source)
+struct ExtrasView: View {
+    private let upiID = "9916268695@ptaxis"
+    private let upiDeepLink = "upi://pay?pa=9916268695@ptaxis&pn=Ray&cu=INR"
+    private let sourceURL = URL(string: "https://github.com/theawesomeray/reimburse-mate")!
+    @State private var showPrevious = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Donate (UPI)") {
+                    HStack(alignment: .center, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Button {
+                                if let url = URL(string: upiDeepLink) { UIApplication.shared.open(url) }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "indianrupeesign.circle")
+                                    Text("Pay via UPI").bold()
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+
+                            Text("Scan QR to pay via UPI")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 12)
+                        QRView(string: upiDeepLink)
+                            .frame(maxWidth: 160, maxHeight: 160)
+                    }
+                }
+
+                Section("Changelog") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        // Latest version header (v0.51)
+                        Text("v0.51")
+                            .font(.headline)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label("Fix UPI pay button layout (prominent, large)", systemImage: "checkmark.circle")
+                            Label("Smooth changelog dropdown with animated chevron", systemImage: "checkmark.circle")
+                            Label("Ensure version badge reflects Marketing Version", systemImage: "checkmark.circle")
+                        }
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                        // Previous versions as a collapsible group (animated)
+                        DisclosureGroup(isExpanded: $showPrevious) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Group {
+                                    Text("v0.5").font(.subheadline).bold()
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Label("Move Extras out of tab bar; open from Log page (info button)", systemImage: "circle")
+                                        Label("Donate section simplified: QR only + 'Pay in UPI app' (no raw UPI shown)", systemImage: "circle")
+                                        Label("Changelog with dropdown for previous versions", systemImage: "circle")
+                                    }
+                                }
+                                Group {
+                                    Text("v0.4").font(.subheadline).bold()
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Label("One-tap Claim Unclaimed → build ZIP (CSV + images + summaries) and compose email", systemImage: "circle")
+                                        Label("Auto-mark as Claimed after successful send/share", systemImage: "circle")
+                                        Label("Remove multi-select email flow; keep only mail icon on logs page", systemImage: "circle")
+                                        Label("Export screen: ZIP-only (removed CSV share)", systemImage: "circle")
+                                    }
+                                }
+                                Group {
+                                    Text("v0.3").font(.subheadline).bold()
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Label("Separate images: Invoice + Payment screenshot", systemImage: "circle")
+                                        Label("No status picker on create; default to Unclaimed", systemImage: "circle")
+                                        Label("Add Amount (₹) field; show in list/detail/export/share", systemImage: "circle")
+                                        Label("Remove Quick Actions; thumbnail prefers payment image", systemImage: "circle")
+                                    }
+                                }
+                                Group {
+                                    Text("v0.2").font(.subheadline).bold()
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Label("Splash overlay: 'Reimburse Mate — an app by @theawesomeray'", systemImage: "circle")
+                                        Label("App icon metadata fixes", systemImage: "circle")
+                                        Label("Smaller image previews; keyboard dismissal; clear all fields on save", systemImage: "circle")
+                                    }
+                                }
+                                Group {
+                                    Text("v0.1").font(.subheadline).bold()
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Label("MVP: Log reimbursements (date, project, note, location, images)", systemImage: "circle")
+                                        Label("List + Detail views; basic export", systemImage: "circle")
+                                    }
+                                }
+                            }
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "chevron.right")
+                                    .rotationEffect(.degrees(showPrevious ? 90 : 0))
+                                    .animation(.snappy, value: showPrevious)
+                                Text("Previous versions")
+                                    .font(.subheadline.bold())
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                    .animation(.snappy, value: showPrevious)
+                }
+
+                Section("Open Source") {
+                    Link(destination: sourceURL) {
+                        Label("Source on GitHub", systemImage: "link")
+                    }
+                }
+            }
+            .navigationTitle("Extras")
+        }
+    }
+}
+
 // MARK: - Export
 
 struct ExportView: View {
@@ -695,6 +857,88 @@ struct ToastView: View {
     }
 }
 
+// MARK: - Version Badge & Utilities
+struct VersionBadge: View {
+    var body: some View {
+        Text("v\(Bundle.main.appVersion)")
+            .font(.caption2)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.ultraThinMaterial)
+            .clipShape(Capsule())
+            .shadow(radius: 1)
+    }
+}
+
+extension Bundle {
+    var appVersion: String {
+        (infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0.0"
+    }
+}
+
+struct QRView: View {
+    let string: String
+    private let context = CIContext()
+    private let filter = CIFilter.qrCodeGenerator()
+    var body: some View {
+        if let ui = generate() {
+            Image(uiImage: ui)
+                .interpolation(.none)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: 160, maxHeight: 160)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        } else {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.quaternary)
+                .frame(width: 120, height: 120)
+        }
+    }
+    private func generate() -> UIImage? {
+        let data = Data(string.utf8)
+        filter.message = data
+        filter.correctionLevel = "M"
+        guard let output = filter.outputImage else { return nil }
+        let scaled = output.transformed(by: CGAffineTransform(scaleX: 6, y: 6))
+        if let cg = context.createCGImage(scaled, from: scaled.extent) {
+            return UIImage(cgImage: cg)
+        }
+        return nil
+    }
+}
+
+// MARK: - Camera Picker (UIKit bridge)
+struct CameraPicker: UIViewControllerRepresentable {
+    var onImage: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.cameraDevice = .rear
+        picker.allowsEditing = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: CameraPicker
+        init(_ parent: CameraPicker) { self.parent = parent }
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            if let img = info[.originalImage] as? UIImage {
+                parent.onImage(img)
+            }
+            parent.dismiss()
+        }
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
+        }
+    }
+}
 
 // MARK: - Simple ZIP builder (store-only, no compression)
 fileprivate enum ZipBuilder {
