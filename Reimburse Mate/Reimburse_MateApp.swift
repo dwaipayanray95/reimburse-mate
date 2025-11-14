@@ -15,6 +15,7 @@ import Combine
 import MessageUI
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import AVFoundation
 
 @main
 struct ReimburseMateApp: App {
@@ -120,16 +121,11 @@ final class Reimbursement {
 
 struct RootView: View {
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            TabView {
-                AddEntryView()
-                    .tabItem { Label("Log", systemImage: "plus.square.on.square") }
-                ListView()
-                    .tabItem { Label("All", systemImage: "list.bullet.rectangle") }
-            }
-            VersionBadge()
-                .padding(.trailing, 8)
-                .padding(.bottom, 6)
+        TabView {
+            AddEntryView()
+                .tabItem { Label("Log", systemImage: "plus.square.on.square") }
+            ListView()
+                .tabItem { Label("All", systemImage: "list.bullet.rectangle") }
         }
     }
 }
@@ -173,25 +169,32 @@ struct AddEntryView: View {
     @State private var showExtras = false
     @State private var showInvoiceCamera = false
     @State private var showPaymentCamera = false
+    @State private var showInvoiceSource = false
+    @State private var showPaymentSource = false
+    @State private var showInvoicePhotoPicker = false
+    @State private var showPaymentPhotoPicker = false
+    @State private var showCameraAlert = false
+    @State private var cameraAlertMessage = ""
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Invoice Image") {
-                    PhotosPicker(selection: $invoicePhotoItem, matching: .images) {
+                    Button {
+                        showInvoiceSource = true
+                    } label: {
                         HStack {
                             Image(systemName: "doc.text.image")
-                            Text(invoiceImage == nil ? "Pick invoice image" : "Change invoice image")
+                            Text(invoiceImage == nil ? "Add invoice image" : "Change invoice image")
                         }
+                    }
+                    .confirmationDialog("Invoice image", isPresented: $showInvoiceSource, titleVisibility: .visible) {
+                        Button("Take Photo") { openInvoiceCamera() }
+                        Button("Choose from Photos") { showInvoicePhotoPicker = true }
+                        Button("Cancel", role: .cancel) {}
                     }
                     .onChange(of: invoicePhotoItem) { old, newItem in
                         Task { invoiceImage = try await newItem?.loadUIImageDownscaled() }
-                    }
-
-                    Button {
-                        showInvoiceCamera = true
-                    } label: {
-                        Label("Take invoice photo", systemImage: "camera")
                     }
 
                     if let img = invoiceImage {
@@ -212,20 +215,21 @@ struct AddEntryView: View {
                 }
 
                 Section("Payment Screenshot") {
-                    PhotosPicker(selection: $paymentPhotoItem, matching: .images) {
+                    Button {
+                        showPaymentSource = true
+                    } label: {
                         HStack {
                             Image(systemName: "photo")
-                            Text(paymentImage == nil ? "Pick payment screenshot" : "Change payment screenshot")
+                            Text(paymentImage == nil ? "Add payment image" : "Change payment image")
                         }
+                    }
+                    .confirmationDialog("Payment image", isPresented: $showPaymentSource, titleVisibility: .visible) {
+                        Button("Take Photo") { openPaymentCamera() }
+                        Button("Choose from Photos") { showPaymentPhotoPicker = true }
+                        Button("Cancel", role: .cancel) {}
                     }
                     .onChange(of: paymentPhotoItem) { old, newItem in
                         Task { paymentImage = try await newItem?.loadUIImageDownscaled() }
-                    }
-
-                    Button {
-                        showPaymentCamera = true
-                    } label: {
-                        Label("Take payment photo", systemImage: "camera")
                     }
 
                     if let img = paymentImage {
@@ -306,6 +310,13 @@ struct AddEntryView: View {
                     paymentImage = img
                 }
             }
+            .photosPicker(isPresented: $showInvoicePhotoPicker, selection: $invoicePhotoItem, matching: .images)
+            .photosPicker(isPresented: $showPaymentPhotoPicker, selection: $paymentPhotoItem, matching: .images)
+            .alert("Camera issue", isPresented: $showCameraAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(cameraAlertMessage)
+            }
         }
     }
 
@@ -343,6 +354,47 @@ struct AddEntryView: View {
         paymentImage = nil
         invoicePhotoItem = nil
         paymentPhotoItem = nil
+    }
+
+    private func openInvoiceCamera() {
+        preflightCamera(allow: { showInvoiceCamera = true },
+                        fallbackToPhotos: { showInvoicePhotoPicker = true })
+    }
+    private func openPaymentCamera() {
+        preflightCamera(allow: { showPaymentCamera = true },
+                        fallbackToPhotos: { showPaymentPhotoPicker = true })
+    }
+    private func preflightCamera(allow: @escaping () -> Void, fallbackToPhotos: @escaping () -> Void) {
+        // 1) Simulator or devices without camera
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            cameraAlertMessage = "Camera not available on this device (simulator?). Opening Photos instead."
+            showCameraAlert = true
+            fallbackToPhotos()
+            return
+        }
+        // 2) Permission preflight
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            allow()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async {
+                    if granted {
+                        allow()
+                    } else {
+                        cameraAlertMessage = "Camera access was denied. Enable it in Settings › Privacy › Camera. Opening Photos instead."
+                        showCameraAlert = true
+                        fallbackToPhotos()
+                    }
+                }
+            }
+        case .denied, .restricted:
+            cameraAlertMessage = "Camera access is not permitted. Enable it in Settings › Privacy › Camera. Opening Photos instead."
+            showCameraAlert = true
+            fallbackToPhotos()
+        @unknown default:
+            fallbackToPhotos()
+        }
     }
 }
 
@@ -621,13 +673,13 @@ struct ExtrasView: View {
 
                 Section("Changelog") {
                     VStack(alignment: .leading, spacing: 8) {
-                        // Latest version header (v0.51)
-                        Text("v0.51")
+                        // Latest version header (v0.52)
+                        Text("v0.52")
                             .font(.headline)
                         VStack(alignment: .leading, spacing: 4) {
-                            Label("Fix UPI pay button layout (prominent, large)", systemImage: "checkmark.circle")
-                            Label("Smooth changelog dropdown with animated chevron", systemImage: "checkmark.circle")
-                            Label("Ensure version badge reflects Marketing Version", systemImage: "checkmark.circle")
+                            Label("Remove version badge from home (stuck display)", systemImage: "checkmark.circle")
+                            Label("Unify image attach flow: single button with camera or Photos", systemImage: "checkmark.circle")
+                            Label("Bump Marketing Version to 0.52", systemImage: "checkmark.circle")
                         }
                         .font(.subheadline)
                         .foregroundStyle(.secondary)

@@ -399,6 +399,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Reimburse-Mate-Info.plist";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Use camera to capture invoice/payment images for reimbursements.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Capture where a payment happened to help with reimbursements.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Allow access to pick payment screenshots for reimbursement.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -435,6 +436,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Reimburse-Mate-Info.plist";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Use camera to capture invoice/payment images for reimbursements.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Capture where a payment happened to help with reimbursements.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Allow access to pick payment screenshots for reimbursement.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
