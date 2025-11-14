@@ -21,10 +21,22 @@ struct ReimburseMateApp: App {
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         return try! ModelContainer(for: schema, configurations: [configuration])
     }()
+    @State private var showSplash = true
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            ZStack {
+                RootView()
+                if showSplash {
+                    SplashView()
+                        .transition(.opacity)
+                        .zIndex(1)
+                }
+            }
+            .task {
+                try? await Task.sleep(for: .seconds(2.0))
+                withAnimation(.easeInOut(duration: 0.35)) { showSplash = false }
+            }
         }
         .modelContainer(sharedModelContainer)
     }
@@ -111,6 +123,25 @@ struct RootView: View {
                 .tabItem { Label("Log", systemImage: "plus.square.on.square") }
             ListView()
                 .tabItem { Label("All", systemImage: "list.bullet.rectangle") }
+        }
+    }
+}
+
+// MARK: - Splash
+struct SplashView: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(gradient: Gradient(colors: [Color(.systemBackground), Color(.secondarySystemBackground)]), startPoint: .topLeading, endPoint: .bottomTrailing)
+                .ignoresSafeArea()
+            VStack(spacing: 8) {
+                Text("Reimburse Mate")
+                    .font(.system(size: 34, weight: .bold))
+                Text("an app by @theawesomeray")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .multilineTextAlignment(.center)
+            .padding()
         }
     }
 }
