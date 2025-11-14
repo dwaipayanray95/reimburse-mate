@@ -12,6 +12,7 @@ import SwiftData
 import PhotosUI
 import CoreLocation
 import Combine
+import MessageUI
 
 @main
 struct ReimburseMateApp: App {
@@ -271,6 +272,14 @@ struct ListView: View {
     @Environment(\.modelContext) private var context
     @State private var filter: ClaimStatus? = nil
     @State private var queryText: String = ""
+    @State private var showingMailComposer = false
+    @State private var showingShareSheet = false
+    @State private var mailSubject: String = ""
+    @State private var mailBody: String = ""
+    @State private var mailAttachments: [MailView.MailAttachment] = []
+    @State private var shareItems: [Any] = []
+    @State private var mailRecipients: [String] = ["accounts@tcustudios.com"]
+    @State private var pendingClaimIDs: [UUID] = []
 
     var predicate: Predicate<Reimbursement>? {
         // Only use a SwiftData predicate for status (Predicates don't allow .lowercased())
@@ -312,7 +321,12 @@ struct ListView: View {
                         Label(filter == nil ? "All" : filter!.rawValue, systemImage: "line.3.horizontal.decrease.circle")
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        claimAllUnclaimed()
+                    } label: {
+                        Label("Claim Unclaimed", systemImage: "envelope.badge")
+                    }
                     NavigationLink(destination: ExportView(items: items)) {
                         Image(systemName: "square.and.arrow.up")
                     }
@@ -321,6 +335,16 @@ struct ListView: View {
             .searchable(text: $queryText)
             .overlay {
                 if items.isEmpty { ContentUnavailableView("No reimbursements", systemImage: "doc.text.magnifyingglass", description: Text("Log some on the first tab.")) }
+            }
+            .sheet(isPresented: $showingMailComposer) {
+                MailView(subject: mailSubject, recipients: mailRecipients, body: mailBody, attachments: mailAttachments) { result in
+                    if result == .sent { markPendingAsClaimed() }
+                }
+            }
+            .sheet(isPresented: $showingShareSheet) {
+                ActivityView(activityItems: shareItems) { completed in
+                    if completed { markPendingAsClaimed() }
+                }
             }
         }
     }
@@ -337,6 +361,63 @@ struct ListView: View {
             || $0.note.localizedCaseInsensitiveContains(queryText)
             || ($0.placeName ?? "").localizedCaseInsensitiveContains(queryText)
         }
+    }
+
+    // --- Helper to claim all unclaimed, build zip, and drive mail/share flow
+    private func claimAllUnclaimed() {
+        let unclaimed = all.filter { $0.status == .unclaimed }
+        guard !unclaimed.isEmpty else { return }
+        pendingClaimIDs = unclaimed.map { $0.id }
+
+        // Build mail subject/body
+        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd HH:mm"
+        mailSubject = "Reimbursement claim (\(unclaimed.count)) — \(df.string(from: Date()))"
+        mailBody = unclaimed.map { $0.shareText() }.joined(separator: "\n\n———\n\n")
+
+        // Assemble files for zip
+        var files: [(name: String, data: Data)] = []
+        // CSV
+        let header = ["id","date","projectCode","note","status","placeName","coordinate","amount"].joined(separator: ",")
+        let rows = unclaimed.map { $0.csvRow() }
+        if let csvData = ([header] + rows).joined(separator: "\n").data(using: .utf8) {
+            files.append(("reimbursements.csv", csvData))
+        }
+        // Per-entry text + images
+        for r in unclaimed {
+            let stamp = r.date.formatted(date: .numeric, time: .shortened).replacingOccurrences(of: "/", with: "-")
+            let safeProj = r.projectCode.replacingOccurrences(of: "/", with: "-")
+            if let txt = r.shareText().data(using: .utf8) {
+                files.append(("\(safeProj)-\(stamp)-summary.txt", txt))
+            }
+            if let inv = r.invoiceImageData { files.append(("\(safeProj)-\(stamp)-invoice.jpg", inv)) }
+            if let pay = r.paymentImageData { files.append(("\(safeProj)-\(stamp)-payment.jpg", pay)) }
+        }
+        guard let zipData = ZipBuilder.makeZip(named: "reimbursements.zip", files: files) else { return }
+
+        // Prepare Mail attachments and Share items
+        mailAttachments = [MailView.MailAttachment(data: zipData, mimeType: "application/zip", fileName: "reimbursements.zip")]
+
+        // Also write to a temp URL for share sheet fallback
+        let zipURL = FileManager.default.temporaryDirectory.appendingPathComponent("reimbursements.zip")
+        try? zipData.write(to: zipURL, options: .atomic)
+        shareItems = [zipURL]
+
+        if MailView.canSendMail() {
+            showingMailComposer = true
+        } else {
+            showingShareSheet = true
+        }
+    }
+
+    private func markPendingAsClaimed() {
+        guard !pendingClaimIDs.isEmpty else { return }
+        for id in pendingClaimIDs {
+            if let idx = all.firstIndex(where: { $0.id == id }) {
+                all[idx].status = .claimed
+            }
+        }
+        try? context.save()
+        pendingClaimIDs.removeAll()
     }
 }
 
@@ -561,4 +642,133 @@ struct ToastView: View {
             .shadow(radius: 4)
             .padding(.top, 12)
     }
+}
+
+
+// MARK: - Simple ZIP builder (store-only, no compression)
+fileprivate enum ZipBuilder {
+    static func makeZip(named: String, files: [(name: String, data: Data)]) -> Data? {
+        var out = Data()
+        var centralDirectory = Data()
+        var offset: UInt32 = 0
+        for file in files {
+            let nameData = file.name.data(using: .utf8) ?? Data()
+            let crc = crc32(file.data)
+            // Local file header
+            out.append(uint32(0x04034b50))
+            out.append(uint16(20)) // version needed
+            out.append(uint16(0))  // flags
+            out.append(uint16(0))  // method: store
+            out.append(uint16(0))  // time
+            out.append(uint16(0))  // date
+            out.append(uint32(crc))
+            out.append(uint32(UInt32(file.data.count))) // comp size
+            out.append(uint32(UInt32(file.data.count))) // uncomp size
+            out.append(uint16(UInt16(nameData.count)))
+            out.append(uint16(0)) // extra len
+            out.append(nameData)
+            out.append(file.data)
+
+            // Central directory header
+            var c = Data()
+            c.append(uint32(0x02014b50))
+            c.append(uint16(20)) // version made by
+            c.append(uint16(20)) // version needed
+            c.append(uint16(0))  // flags
+            c.append(uint16(0))  // method
+            c.append(uint16(0))  // time
+            c.append(uint16(0))  // date
+            c.append(uint32(crc))
+            c.append(uint32(UInt32(file.data.count)))
+            c.append(uint32(UInt32(file.data.count)))
+            c.append(uint16(UInt16(nameData.count)))
+            c.append(uint16(0)) // extra len
+            c.append(uint16(0)) // comment len
+            c.append(uint16(0)) // disk number start
+            c.append(uint16(0)) // internal attrs
+            c.append(uint32(0)) // external attrs
+            c.append(uint32(offset)) // relative offset of local header
+            c.append(nameData)
+            centralDirectory.append(c)
+
+            offset = UInt32(out.count)
+        }
+        let centralStart = UInt32(out.count)
+        out.append(centralDirectory)
+        let centralSize = UInt32(centralDirectory.count)
+        // End of central directory
+        out.append(uint32(0x06054b50))
+        out.append(uint16(0)) // disk
+        out.append(uint16(0)) // start disk
+        out.append(uint16(UInt16(files.count)))
+        out.append(uint16(UInt16(files.count)))
+        out.append(uint32(centralSize))
+        out.append(uint32(centralStart))
+        out.append(uint16(0)) // comment len
+        return out
+    }
+
+    private static func uint16(_ v: UInt16) -> Data { withUnsafeBytes(of: v.littleEndian, { Data($0) }) }
+    private static func uint32(_ v: UInt32) -> Data { withUnsafeBytes(of: v.littleEndian, { Data($0) }) }
+
+    private static func crc32(_ data: Data) -> UInt32 {
+        var crc: UInt32 = 0xFFFF_FFFF
+        for b in data { crc = (crc >> 8) ^ crcTable[Int((crc ^ UInt32(b)) & 0xFF)] }
+        return crc ^ 0xFFFF_FFFF
+    }
+
+    // IEEE 802.3 CRC-32 (polynomial 0xEDB88320)
+    private static let crcTable: [UInt32] = {
+        (0..<256).map { i -> UInt32 in
+            var c = UInt32(i)
+            for _ in 0..<8 { c = (c & 1) != 0 ? (0xEDB88320 ^ (c >> 1)) : (c >> 1) }
+            return c
+        }
+    }()
+}
+
+// MARK: - Mail / Share bridges
+
+struct MailView: UIViewControllerRepresentable {
+    struct MailAttachment { let data: Data; let mimeType: String; let fileName: String }
+    let subject: String
+    let recipients: [String]
+    let body: String
+    let attachments: [MailAttachment]
+    var onResult: ((MFMailComposeResult) -> Void)? = nil
+
+    class Coordinator: NSObject, MFMailComposeViewControllerDelegate {
+        let parent: MailView
+        init(parent: MailView) { self.parent = parent }
+        func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
+            controller.dismiss(animated: true) { self.parent.onResult?(result) }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    static func canSendMail() -> Bool { MFMailComposeViewController.canSendMail() }
+
+    func makeUIViewController(context: Context) -> MFMailComposeViewController {
+        let vc = MFMailComposeViewController()
+        vc.setSubject(subject)
+        vc.setToRecipients(recipients)
+        vc.setMessageBody(body, isHTML: false)
+        for a in attachments { vc.addAttachmentData(a.data, mimeType: a.mimeType, fileName: a.fileName) }
+        vc.mailComposeDelegate = context.coordinator
+        return vc
+    }
+
+    func updateUIViewController(_ uiViewController: MFMailComposeViewController, context: Context) {}
+}
+
+struct ActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    var completion: ((Bool) -> Void)? = nil
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let vc = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+        vc.completionWithItemsHandler = { _, completed, _, _ in completion?(completed) }
+        return vc
+    }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
