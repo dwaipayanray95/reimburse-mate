@@ -16,6 +16,7 @@ import MessageUI
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import AVFoundation
+import ImageIO
 
 @main
 struct ReimburseMateApp: App {
@@ -45,7 +46,7 @@ struct ReimburseMateApp: App {
                 }
             }
             .task {
-                try? await Task.sleep(for: .seconds(1.0))
+                try? await Task.sleep(for: .seconds(1.5))
                 withAnimation(.easeInOut(duration: 0.35)) { showSplash = false }
             }
         }
@@ -100,17 +101,15 @@ final class Reimbursement {
     }
 
     func thumbnailImage(maxDimension: CGFloat = 600) -> UIImage? {
-        // Prefer payment image for the row thumbnail, else fall back to invoice image
-        let dataChoice = paymentImageData ?? invoiceImageData
-        guard let data = dataChoice, let image = UIImage(data: data) else { return nil }
-        let size = image.size
-        let scale = min(maxDimension/size.width, maxDimension/size.height, 1)
-        let newSize = CGSize(width: size.width*scale, height: size.height*scale)
-        UIGraphicsBeginImageContextWithOptions(newSize, true, 1)
-        image.draw(in: CGRect(origin: .zero, size: newSize))
-        let resized = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        return resized
+        guard let data = (paymentImageData ?? invoiceImageData) else { return nil }
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(maxDimension),
+            kCGImageSourceCreateThumbnailWithTransform: true
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        return UIImage(cgImage: cg)
     }
 
     func csvRow(delimiter: String = ",") -> String {
@@ -146,18 +145,38 @@ struct RootView: View {
 // MARK: - Splash
 struct SplashView: View {
     var body: some View {
-        ZStack {
-            LinearGradient(gradient: Gradient(colors: [Color(.systemBackground), Color(.secondarySystemBackground)]), startPoint: .topLeading, endPoint: .bottomTrailing)
+        GeometryReader { geo in
+            let w = geo.size.width
+            let titleSize = min(max(w * 0.10, 36), 56)      // scales with device width
+            let subtitleSize = min(max(w * 0.05, 15), 24)
+            ZStack {
+                LinearGradient(
+                    gradient: Gradient(colors: [Color(.systemBackground), Color(.secondarySystemBackground)]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
                 .ignoresSafeArea()
-            VStack(spacing: 8) {
-                Text("Reimburse Mate")
-                    .font(.system(size: 34, weight: .bold))
-                Text("an app by @theawesomeray")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+
+                VStack(spacing: 12) {
+                    Text("Reimburse Mate")
+                        .font(.system(size: titleSize, weight: .heavy, design: .rounded))
+                        .kerning(0.5)
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
+                        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 1)
+
+                    Text("an app by @theawesomeray")
+                        .font(.system(size: subtitleSize, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 14)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+                .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 4)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .multilineTextAlignment(.center)
-            .padding()
         }
     }
 }
@@ -436,7 +455,7 @@ struct ListView: View {
         return nil
     }
 
-    @Query(sort: [SortDescriptor(\Reimbursement.date, order: .reverse)], animation: .snappy)
+    @Query(sort: [SortDescriptor(\Reimbursement.date, order: .reverse)])
     private var all: [Reimbursement]
 
     var body: some View {
@@ -654,6 +673,15 @@ struct DetailView: View {
     private func toggleStatus() { r.status = (r.status == .claimed ? .unclaimed : .claimed); try? context.save() }
 }
 
+// MARK: - ThumbCache (for thumbnail caching)
+final class ThumbCache {
+    static let shared: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
+        c.countLimit = 500
+        return c
+    }()
+}
+
 // MARK: - Async Thumb (avoid main-thread decode)
 struct ThumbView: View {
     let r: Reimbursement
@@ -675,9 +703,17 @@ struct ThumbView: View {
     }
     private func loadThumbIfNeeded() {
         guard thumb == nil else { return }
+        let key = NSString(string: r.id.uuidString)
+        if let cached = ThumbCache.shared.object(forKey: key) {
+            self.thumb = cached
+            return
+        }
         DispatchQueue.global(qos: .userInitiated).async {
-            let t = r.thumbnailImage(maxDimension: 80)
-            DispatchQueue.main.async { self.thumb = t }
+            autoreleasepool {
+                let t = r.thumbnailImage(maxDimension: 80)
+                if let t { ThumbCache.shared.setObject(t, forKey: key) }
+                DispatchQueue.main.async { self.thumb = t }
+            }
         }
     }
 }
