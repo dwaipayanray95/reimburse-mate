@@ -21,8 +21,16 @@ import AVFoundation
 struct ReimburseMateApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([Reimbursement.self])
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-        return try! ModelContainer(for: schema, configurations: [configuration])
+        let diskConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        do {
+            return try ModelContainer(for: schema, configurations: [diskConfig])
+        } catch {
+            #if DEBUG
+            print("⚠️ SwiftData store failed to open: \(error). Falling back to in-memory store so the app can launch.")
+            #endif
+            let memConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+            return try! ModelContainer(for: schema, configurations: [memConfig])
+        }
     }()
     @State private var showSplash = true
 
@@ -37,7 +45,7 @@ struct ReimburseMateApp: App {
                 }
             }
             .task {
-                try? await Task.sleep(for: .seconds(2.0))
+                try? await Task.sleep(for: .seconds(1.0))
                 withAnimation(.easeInOut(duration: 0.35)) { showSplash = false }
             }
         }
@@ -120,12 +128,17 @@ final class Reimbursement {
 // MARK: - Root & Tabs
 
 struct RootView: View {
+    @State private var tab = 0
     var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             AddEntryView()
                 .tabItem { Label("Log", systemImage: "plus.square.on.square") }
-            ListView()
-                .tabItem { Label("All", systemImage: "list.bullet.rectangle") }
+                .tag(0)
+            Group {
+                if tab == 1 { ListView() } else { Color.clear }
+            }
+            .tabItem { Label("All", systemImage: "list.bullet.rectangle") }
+            .tag(1)
         }
     }
 }
@@ -302,12 +315,12 @@ struct AddEntryView: View {
             }
             .sheet(isPresented: $showInvoiceCamera) {
                 CameraPicker { img in
-                    invoiceImage = img
+                    invoiceImage = img.downscaled(maxSide: 2000)
                 }
             }
             .sheet(isPresented: $showPaymentCamera) {
                 CameraPicker { img in
-                    paymentImage = img
+                    paymentImage = img.downscaled(maxSide: 2000)
                 }
             }
             .photosPicker(isPresented: $showInvoicePhotoPicker, selection: $invoicePhotoItem, matching: .images)
@@ -317,6 +330,7 @@ struct AddEntryView: View {
             } message: {
                 Text(cameraAlertMessage)
             }
+            .tint(.blue)
         }
     }
 
@@ -475,6 +489,7 @@ struct ListView: View {
                     if completed { markPendingAsClaimed() }
                 }
             }
+            .tint(.blue)
         }
     }
 
@@ -554,18 +569,8 @@ struct RowView: View {
     let r: Reimbursement
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            if let img = r.thumbnailImage(maxDimension: 80) {
-                Image(uiImage: img)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 56, height: 56)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(.quaternary)
-                    .frame(width: 56, height: 56)
-                    .overlay(Image(systemName: "photo").foregroundStyle(.secondary))
-            }
+            ThumbView(r: r)
+                .frame(width: 56, height: 56)
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(r.projectCode).bold()
@@ -593,6 +598,8 @@ struct RowView: View {
 
 struct DetailView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @State private var showDeleteAlert = false
     @State var r: Reimbursement
 
     var body: some View {
@@ -627,16 +634,68 @@ struct DetailView: View {
         }
         .navigationTitle("Entry")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
                 ShareLink(item: r.shareText()) { Image(systemName: "square.and.arrow.up") }
+                Button(role: .destructive) { showDeleteAlert = true } label: { Image(systemName: "trash") }
             }
+        }
+        .alert("Delete entry?", isPresented: $showDeleteAlert) {
+            Button("Delete", role: .destructive) {
+                context.delete(r)
+                try? context.save()
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will permanently remove this reimbursement.")
         }
     }
 
     private func toggleStatus() { r.status = (r.status == .claimed ? .unclaimed : .claimed); try? context.save() }
 }
 
+// MARK: - Async Thumb (avoid main-thread decode)
+struct ThumbView: View {
+    let r: Reimbursement
+    @State private var thumb: UIImage? = nil
+    var body: some View {
+        ZStack {
+            if let img = thumb {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(.quaternary)
+                    .overlay(Image(systemName: "photo").foregroundStyle(.secondary))
+                    .task { loadThumbIfNeeded() }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+    private func loadThumbIfNeeded() {
+        guard thumb == nil else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let t = r.thumbnailImage(maxDimension: 80)
+            DispatchQueue.main.async { self.thumb = t }
+        }
+    }
+}
+
 // MARK: - Extras (Changelog / Donate / Source)
+extension UIImage {
+    func downscaled(maxSide: CGFloat = 2000) -> UIImage {
+        let size = self.size
+        let scale = min(maxSide/size.width, maxSide/size.height, 1)
+        if scale >= 1 { return self }
+        let newSize = CGSize(width: size.width*scale, height: size.height*scale)
+        UIGraphicsBeginImageContextWithOptions(newSize, true, 1)
+        self.draw(in: CGRect(origin: .zero, size: newSize))
+        let resized = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        return resized ?? self
+    }
+}
 struct ExtrasView: View {
     private let upiID = "9916268695@ptaxis"
     private let upiDeepLink = "upi://pay?pa=9916268695@ptaxis&pn=Ray&cu=INR"
@@ -1096,7 +1155,6 @@ struct MailView: UIViewControllerRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
     static func canSendMail() -> Bool { MFMailComposeViewController.canSendMail() }
-
     func makeUIViewController(context: Context) -> MFMailComposeViewController {
         let vc = MFMailComposeViewController()
         vc.setSubject(subject)
@@ -1120,3 +1178,4 @@ struct ActivityView: UIViewControllerRepresentable {
     }
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
+
