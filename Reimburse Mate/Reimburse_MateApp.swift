@@ -112,6 +112,53 @@ final class Reimbursement {
         return UIImage(cgImage: cg)
     }
 
+    func invoiceThumbnailImage(maxDimension: CGFloat = 600) -> UIImage? {
+        guard let data = invoiceImageData else { return nil }
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(maxDimension),
+            kCGImageSourceCreateThumbnailWithTransform: true
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        return UIImage(cgImage: cg)
+    }
+
+    func paymentThumbnailImage(maxDimension: CGFloat = 600) -> UIImage? {
+        guard let data = paymentImageData else { return nil }
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(maxDimension),
+            kCGImageSourceCreateThumbnailWithTransform: true
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        return UIImage(cgImage: cg)
+    }
+
+    func invoiceDisplayImage(maxDimension: CGFloat = 2400) -> UIImage? {
+        guard let data = invoiceImageData else { return nil }
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(maxDimension),
+            kCGImageSourceCreateThumbnailWithTransform: true
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        return UIImage(cgImage: cg)
+    }
+    func paymentDisplayImage(maxDimension: CGFloat = 2400) -> UIImage? {
+        guard let data = paymentImageData else { return nil }
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(maxDimension),
+            kCGImageSourceCreateThumbnailWithTransform: true
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        return UIImage(cgImage: cg)
+    }
+
     func csvRow(delimiter: String = ",") -> String {
         func esc(_ s: String) -> String {
             let needsQuotes = s.contains(delimiter) || s.contains("\n") || s.contains("\"")
@@ -620,15 +667,51 @@ struct DetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showDeleteAlert = false
     @State var r: Reimbursement
+    @State private var showPreview = false
+    @State private var previewUIImage: UIImage? = nil
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if let img = r.thumbnailImage(maxDimension: 1200) {
-                    Image(uiImage: img)
-                        .resizable()
-                        .scaledToFit()
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                HStack(spacing: 12) {
+                    if let inv = r.invoiceThumbnailImage(maxDimension: 600) {
+                        Image(uiImage: inv)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxHeight: 160)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(alignment: .bottomLeading) {
+                                Tag("Invoice", tint: .blue)
+                                    .padding(6)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if let full = r.invoiceDisplayImage(maxDimension: 2400) {
+                                    previewUIImage = full
+                                    showPreview = true
+                                }
+                            }
+                    }
+                    if let pay = r.paymentThumbnailImage(maxDimension: 600) {
+                        Image(uiImage: pay)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxHeight: 160)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(alignment: .bottomLeading) {
+                                Tag("Payment", tint: .green)
+                                    .padding(6)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if let full = r.paymentDisplayImage(maxDimension: 2400) {
+                                    previewUIImage = full
+                                    showPreview = true
+                                }
+                            }
+                    }
                 }
                 GroupBox("Details") {
                     Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 8) {
@@ -667,6 +750,11 @@ struct DetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This will permanently remove this reimbursement.")
+        }
+        .fullScreenCover(isPresented: $showPreview) {
+            if let ui = previewUIImage {
+                ImagePreview(uiImage: ui)
+            }
         }
     }
 
@@ -1084,6 +1172,70 @@ struct CameraPicker: UIViewControllerRepresentable {
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             parent.dismiss()
         }
+    }
+}
+
+// MARK: - Full-screen image preview (zoomable)
+struct ImagePreview: View {
+    let uiImage: UIImage
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            ZoomableImageView(image: uiImage)
+                .ignoresSafeArea()
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 32, weight: .bold))
+                            .foregroundStyle(.white)
+                            .shadow(radius: 2)
+                    }
+                    .padding(.top, 8)
+                    .padding(.trailing, 12)
+                }
+                Spacer()
+            }
+        }
+    }
+}
+
+struct ZoomableImageView: UIViewRepresentable {
+    let image: UIImage
+    func makeUIView(context: Context) -> UIScrollView {
+        let scroll = UIScrollView()
+        scroll.minimumZoomScale = 1.0
+        scroll.maximumZoomScale = 5.0
+        scroll.backgroundColor = .black
+        scroll.delegate = context.coordinator
+
+        let imageView = UIImageView(image: image)
+        imageView.contentMode = .scaleAspectFit
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        scroll.addSubview(imageView)
+        context.coordinator.imageView = imageView
+
+        // Pin imageView to scrollView's bounds
+        NSLayoutConstraint.activate([
+            imageView.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: scroll.topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: scroll.bottomAnchor),
+            imageView.widthAnchor.constraint(equalTo: scroll.widthAnchor),
+            imageView.heightAnchor.constraint(equalTo: scroll.heightAnchor)
+        ])
+        return scroll
+    }
+    func updateUIView(_ uiView: UIScrollView, context: Context) {}
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject, UIScrollViewDelegate {
+        weak var imageView: UIImageView?
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }
     }
 }
 
