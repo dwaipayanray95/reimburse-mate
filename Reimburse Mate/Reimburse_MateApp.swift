@@ -18,22 +18,10 @@ import CoreImage.CIFilterBuiltins
 import AVFoundation
 import ImageIO
 import UIKit
+import Foundation
 
 @main
 struct ReimburseMateApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([Reimbursement.self])
-        let diskConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-        do {
-            return try ModelContainer(for: schema, configurations: [diskConfig])
-        } catch {
-            #if DEBUG
-            print("⚠️ SwiftData store failed to open: \(error). Falling back to in-memory store so the app can launch.")
-            #endif
-            let memConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-            return try! ModelContainer(for: schema, configurations: [memConfig])
-        }
-    }()
     @State private var showSplash = true
 
     var body: some Scene {
@@ -51,7 +39,7 @@ struct ReimburseMateApp: App {
                 withAnimation(.easeInOut(duration: 0.35)) { showSplash = false }
             }
         }
-        .modelContainer(sharedModelContainer)
+        .modelContainer(for: Reimbursement.self)
     }
 }
 
@@ -74,8 +62,8 @@ final class Reimbursement {
     var longitude: Double?
     var placeName: String?
     var amount: Double?
-    var invoiceImageData: Data? // invoice image
-    var paymentImageData: Data? // payment screenshot (was receiptImageData)
+    @Attribute(.externalStorage) var invoiceImageData: Data? // invoice image
+    @Attribute(.externalStorage) var paymentImageData: Data? // payment screenshot (was receiptImageData)
 
     init(id: UUID = UUID(), date: Date = .now, projectCode: String, note: String, status: ClaimStatus = .unclaimed, latitude: Double? = nil, longitude: Double? = nil, placeName: String? = nil, amount: Double? = nil, invoiceImageData: Data? = nil, paymentImageData: Data? = nil) {
         self.id = id
@@ -386,12 +374,12 @@ struct AddEntryView: View {
             }
             .sheet(isPresented: $showInvoiceCamera) {
                 CameraPicker { img in
-                    invoiceImage = img.downscaled(maxSide: 2000)
+                    invoiceImage = img.downscaled() // default maxSide ~1400
                 }
             }
             .sheet(isPresented: $showPaymentCamera) {
                 CameraPicker { img in
-                    paymentImage = img.downscaled(maxSide: 2000)
+                    paymentImage = img.downscaled() // default maxSide ~1400
                 }
             }
             .photosPicker(isPresented: $showInvoicePhotoPicker, selection: $invoicePhotoItem, matching: .images)
@@ -411,8 +399,8 @@ struct AddEntryView: View {
         #endif
         isSaving = true
         defer { isSaving = false }
-        let invoiceCompressed = invoiceImage?.jpegData(compressionQuality: 0.7)
-        let paymentCompressed = paymentImage?.jpegData(compressionQuality: 0.7)
+        let invoiceCompressed = invoiceImage?.jpegData(compressionQuality: 0.55)
+        let paymentCompressed = paymentImage?.jpegData(compressionQuality: 0.55)
         let amount = Double(amountString.replacingOccurrences(of: ",", with: ""))
         let model = Reimbursement(
             date: date,
@@ -542,8 +530,13 @@ struct ListView: View {
                     Button {
                         claimAllUnclaimed()
                     } label: {
-                        Label("Claim Unclaimed", systemImage: "envelope.badge")
+                        if isBuildingZip {
+                            Label("Preparing…", systemImage: "hourglass")
+                        } else {
+                            Label("Claim Unclaimed", systemImage: "envelope.badge")
+                        }
                     }
+                    .disabled(isBuildingZip)
                 }
             }
             .searchable(text: $queryText)
@@ -558,6 +551,21 @@ struct ListView: View {
             .sheet(isPresented: $showingShareSheet) {
                 ActivityView(activityItems: shareItems) { completed in
                     if completed { markPendingAsClaimed() }
+                }
+            }
+            .overlay {
+                if isBuildingZip {
+                    ZStack {
+                        Color.black.opacity(0.15).ignoresSafeArea()
+                        VStack(spacing: 10) {
+                            ProgressView()
+                            Text("Preparing ZIP…")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(16)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    }
                 }
             }
             .tint(.blue)
@@ -579,48 +587,64 @@ struct ListView: View {
     }
 
     // --- Helper to claim all unclaimed, build zip, and drive mail/share flow
+    @State private var isBuildingZip = false
     private func claimAllUnclaimed() {
         let unclaimed = all.filter { $0.status == .unclaimed }
-        guard !unclaimed.isEmpty else { return }
+        guard !unclaimed.isEmpty, !isBuildingZip else { return }
+        isBuildingZip = true
         pendingClaimIDs = unclaimed.map { $0.id }
 
-        // Build mail subject/body
+        // Build mail subject/body (cheap)
         let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd HH:mm"
         mailSubject = "Reimbursement claim (\(unclaimed.count)) — \(df.string(from: Date()))"
         mailBody = unclaimed.map { $0.shareText() }.joined(separator: "\n\n———\n\n")
 
-        // Assemble files for zip
-        var files: [(name: String, data: Data)] = []
-        // CSV
-        let header = ["id","date","projectCode","note","status","placeName","coordinate","amount"].joined(separator: ",")
-        let rows = unclaimed.map { $0.csvRow() }
-        if let csvData = ([header] + rows).joined(separator: "\n").data(using: .utf8) {
-            files.append(("reimbursements.csv", csvData))
-        }
-        // Per-entry text + images
-        for r in unclaimed {
-            let stamp = r.date.formatted(date: .numeric, time: .shortened).replacingOccurrences(of: "/", with: "-")
-            let safeProj = r.projectCode.replacingOccurrences(of: "/", with: "-")
-            if let txt = r.shareText().data(using: .utf8) {
-                files.append(("\(safeProj)-\(stamp)-summary.txt", txt))
+        DispatchQueue.global(qos: .userInitiated).async {
+            let start = Date()
+            var files: [(name: String, data: Data)] = []
+            // CSV
+            let header = ["id","date","projectCode","note","status","placeName","coordinate","amount"].joined(separator: ",")
+            let rows = unclaimed.map { $0.csvRow() }
+            if let csvData = ([header] + rows).joined(separator: "\n").data(using: .utf8) {
+                files.append(("reimbursements.csv", csvData))
             }
-            if let inv = r.invoiceImageData { files.append(("\(safeProj)-\(stamp)-invoice.jpg", inv)) }
-            if let pay = r.paymentImageData { files.append(("\(safeProj)-\(stamp)-payment.jpg", pay)) }
-        }
-        guard let zipData = ZipBuilder.makeZip(named: "reimbursements.zip", files: files) else { return }
+            // Per-entry text + images
+            for r in unclaimed {
+                let stamp = r.date.formatted(date: .numeric, time: .shortened).replacingOccurrences(of: "/", with: "-")
+                let safeProj = r.projectCode.replacingOccurrences(of: "/", with: "-")
+                if let txt = r.shareText().data(using: .utf8) {
+                    files.append(("\(safeProj)-\(stamp)-summary.txt", txt))
+                }
+                if let inv = r.invoiceImageData {
+                    files.append(("\(safeProj)-\(stamp)-invoice.jpg", inv))
+                }
+                if let pay = r.paymentImageData {
+                    files.append(("\(safeProj)-\(stamp)-payment.jpg", pay))
+                }
+            }
 
-        // Prepare Mail attachments and Share items
-        mailAttachments = [MailView.MailAttachment(data: zipData, mimeType: "application/zip", fileName: "reimbursements.zip")]
+            let zipName = "reimbursements.zip"
+            let zipData = ZipBuilder.makeZip(named: zipName, files: files)
+            let elapsed = Date().timeIntervalSince(start)
 
-        // Also write to a temp URL for share sheet fallback
-        let zipURL = FileManager.default.temporaryDirectory.appendingPathComponent("reimbursements.zip")
-        try? zipData.write(to: zipURL, options: .atomic)
-        shareItems = [zipURL]
+            DispatchQueue.main.async {
+                defer { isBuildingZip = false }
+                guard let zipData else { return }
 
-        if MailView.canSendMail() {
-            showingMailComposer = true
-        } else {
-            showingShareSheet = true
+                let zipURL = FileManager.default.temporaryDirectory.appendingPathComponent(zipName)
+                try? zipData.write(to: zipURL, options: .atomic)
+
+                mailAttachments = [MailView.MailAttachment(data: zipData, mimeType: "application/zip", fileName: zipName)]
+                shareItems = [zipURL]
+
+                print("[ReimburseMate] claimAllUnclaimed ZIP built in \(elapsed)s — files: \(files.count), bytes: \(zipData.count)")
+
+                if MailView.canSendMail() {
+                    showingMailComposer = true
+                } else {
+                    showingShareSheet = true
+                }
+            }
         }
     }
 
@@ -686,46 +710,50 @@ struct DetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 12) {
                     if let inv = r.invoiceThumbnailImage(maxDimension: 600) {
-                        Image(uiImage: inv)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxHeight: 160)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .overlay(alignment: .bottomLeading) {
-                                Tag("Invoice", tint: .blue)
-                                    .padding(6)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                previewUIImage = nil
-                                showPreview = true
-                                DispatchQueue.global(qos: .userInitiated).async {
-                                    let full = r.invoiceDisplayImage()
-                                    DispatchQueue.main.async { self.previewUIImage = full }
+                        VStack(spacing: 6) {
+                            Image(uiImage: inv)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxHeight: 160)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    previewUIImage = nil
+                                    showPreview = true
+                                    DispatchQueue.global(qos: .userInitiated).async {
+                                        let full = r.invoiceDisplayImage()
+                                        DispatchQueue.main.async { self.previewUIImage = full }
+                                    }
                                 }
+                            HStack {
+                                Tag("Invoice", tint: .blue)
+                                Spacer()
                             }
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                     if let pay = r.paymentThumbnailImage(maxDimension: 600) {
-                        Image(uiImage: pay)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxHeight: 160)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .overlay(alignment: .bottomLeading) {
-                                Tag("Payment", tint: .green)
-                                    .padding(6)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                previewUIImage = nil
-                                showPreview = true
-                                DispatchQueue.global(qos: .userInitiated).async {
-                                    let full = r.paymentDisplayImage()
-                                    DispatchQueue.main.async { self.previewUIImage = full }
+                        VStack(spacing: 6) {
+                            Image(uiImage: pay)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxHeight: 160)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    previewUIImage = nil
+                                    showPreview = true
+                                    DispatchQueue.global(qos: .userInitiated).async {
+                                        let full = r.paymentDisplayImage()
+                                        DispatchQueue.main.async { self.previewUIImage = full }
+                                    }
                                 }
+                            HStack {
+                                Tag("Payment", tint: .green)
+                                Spacer()
                             }
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                 }
                 GroupBox("Details") {
@@ -752,7 +780,14 @@ struct DetailView: View {
         .navigationTitle("Entry")
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button { shareEntryZip() } label: { Image(systemName: "square.and.arrow.up") }
+                Button { shareEntryZip() } label: {
+                    if isPreparingEntryZip {
+                        Image(systemName: "hourglass")
+                    } else {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                }
+                .disabled(isPreparingEntryZip)
                 Button(role: .destructive) { showDeleteAlert = true } label: { Image(systemName: "trash") }
             }
         }
@@ -787,49 +822,79 @@ struct DetailView: View {
         .sheet(isPresented: $showingEntryShare) {
             ActivityView(activityItems: entryShareItems)
         }
+        .overlay {
+            if isPreparingEntryZip {
+                ZStack {
+                    Color.black.opacity(0.15).ignoresSafeArea()
+                    VStack(spacing: 10) {
+                        ProgressView()
+                        Text("Preparing ZIP…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(16)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                }
+            }
+        }
     }
 
     private func toggleStatus() { r.status = (r.status == .claimed ? .unclaimed : .claimed); try? context.save() }
 
+    @State private var isPreparingEntryZip = false
     private func shareEntryZip() {
-        // Subject/body
+        guard !isPreparingEntryZip else { return }
+        isPreparingEntryZip = true
+
         let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd HH:mm"
         entryMailSubject = "Reimbursement claim — \(r.projectCode) — \(df.string(from: r.date))"
         entryMailBody = r.shareText()
 
-        // Files for zip
-        var files: [(name: String, data: Data)] = []
+        DispatchQueue.global(qos: .userInitiated).async {
+            let start = Date()
+            var files: [(name: String, data: Data)] = []
 
-        // CSV (single row + header)
-        let header = ["id","date","projectCode","note","status","placeName","coordinate","amount"].joined(separator: ",")
-        let row = r.csvRow()
-        if let csvData = ([header, row]).joined(separator: "\n").data(using: .utf8) {
-            files.append(("reimbursement.csv", csvData))
-        }
+            // CSV header + row
+            let header = ["id","date","projectCode","note","status","placeName","coordinate","amount"].joined(separator: ",")
+            let row = r.csvRow()
+            if let csvData = ([header, row]).joined(separator: "\n").data(using: .utf8) {
+                files.append(("reimbursement.csv", csvData))
+            }
 
-        // Summary + images
-        let stamp = r.date.formatted(date: .numeric, time: .shortened).replacingOccurrences(of: "/", with: "-")
-        let safeProj = r.projectCode.replacingOccurrences(of: "/", with: "-")
-        if let txt = r.shareText().data(using: .utf8) {
-            files.append(("\(safeProj)-\(stamp)-summary.txt", txt))
-        }
-        if let inv = r.invoiceImageData { files.append(("\(safeProj)-\(stamp)-invoice.jpg", inv)) }
-        if let pay = r.paymentImageData { files.append(("\(safeProj)-\(stamp)-payment.jpg", pay)) }
+            let stamp = r.date.formatted(date: .numeric, time: .shortened).replacingOccurrences(of: "/", with: "-")
+            let safeProj = r.projectCode.replacingOccurrences(of: "/", with: "-")
+            if let txt = r.shareText().data(using: .utf8) {
+                files.append(("\(safeProj)-\(stamp)-summary.txt", txt))
+            }
+            if let inv = r.invoiceImageData {
+                files.append(("\(safeProj)-\(stamp)-invoice.jpg", inv))
+            }
+            if let pay = r.paymentImageData {
+                files.append(("\(safeProj)-\(stamp)-payment.jpg", pay))
+            }
 
-        guard let zipData = ZipBuilder.makeZip(named: "\(safeProj)-\(stamp).zip", files: files) else { return }
+            let zipName = "\(safeProj)-\(stamp).zip"
+            let zipData = ZipBuilder.makeZip(named: zipName, files: files)
+            let elapsed = Date().timeIntervalSince(start)
 
-        // Prepare for Mail
-        entryMailAttachments = [MailView.MailAttachment(data: zipData, mimeType: "application/zip", fileName: "\(safeProj)-\(stamp).zip")]
+            DispatchQueue.main.async {
+                defer { isPreparingEntryZip = false }
+                guard let zipData else { return }
 
-        // Also write to temp URL for share sheet fallback
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(safeProj)-\(stamp).zip")
-        try? zipData.write(to: url, options: .atomic)
-        entryShareItems = [url]
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent(zipName)
+                try? zipData.write(to: url, options: .atomic)
 
-        if MailView.canSendMail() {
-            showingEntryMail = true
-        } else {
-            showingEntryShare = true
+                entryMailAttachments = [MailView.MailAttachment(data: zipData, mimeType: "application/zip", fileName: zipName)]
+                entryShareItems = [url]
+
+                print("[ReimburseMate] shareEntryZip built in \(elapsed)s — files: \(files.count), bytes: \(zipData.count)")
+
+                if MailView.canSendMail() {
+                    showingEntryMail = true
+                } else {
+                    showingEntryShare = true
+                }
+            }
         }
     }
 }
@@ -881,22 +946,28 @@ struct ThumbView: View {
 
 // MARK: - Extras (Changelog / Donate / Source)
 extension UIImage {
-    func downscaled(maxSide: CGFloat = 2000) -> UIImage {
+    /// Downscale large images so the longest side is ~1400 px.
+    /// This keeps invoice/payment attachments small while still readable.
+    func downscaled(maxSide: CGFloat = 1400) -> UIImage {
         let size = self.size
-        let scale = min(maxSide/size.width, maxSide/size.height, 1)
+        let scale = min(maxSide / size.width, maxSide / size.height, 1)
         if scale >= 1 { return self }
-        let newSize = CGSize(width: size.width*scale, height: size.height*scale)
+
+        let newSize = CGSize(width: size.width * scale,
+                             height: size.height * scale)
+
         UIGraphicsBeginImageContextWithOptions(newSize, true, 1)
         self.draw(in: CGRect(origin: .zero, size: newSize))
         let resized = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
+
         return resized ?? self
     }
 }
 struct ExtrasView: View {
     private let upiID = "9916268695@ptaxis"
     private let upiDeepLink = "upi://pay?pa=9916268695@ptaxis&pn=Ray&cu=INR"
-    private let sourceURL = URL(string: "https://github.com/theawesomeray/reimburse-mate")!
+    private let sourceURL = URL(string: "https://github.com/dwaipayanray95/reimburse-mate")!
     @State private var showPrevious = false
 
     var body: some View {
@@ -929,20 +1000,37 @@ struct ExtrasView: View {
 
                 Section("Changelog") {
                     VStack(alignment: .leading, spacing: 8) {
-                        // Latest version header (v0.52)
-                        Text("v0.52")
+                        // Latest version header (v0.54)
+                        Text("v0.54")
                             .font(.headline)
                         VStack(alignment: .leading, spacing: 4) {
-                            Label("Remove version badge from home (stuck display)", systemImage: "checkmark.circle")
-                            Label("Unify image attach flow: single button with camera or Photos", systemImage: "checkmark.circle")
-                            Label("Bump Marketing Version to 0.52", systemImage: "checkmark.circle")
+                            Label("Further optimise first launch & storage for large image attachments", systemImage: "checkmark.circle")
+                            Label("Faster Extras screen open and QR generation", systemImage: "checkmark.circle")
+                            Label("Smoother changelog expansion animation", systemImage: "checkmark.circle")
+                            Label("Update GitHub source link to @dwaipayanray95 repo", systemImage: "checkmark.circle")
                         }
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
-                        // Previous versions as a collapsible group (animated)
+                        // Previous versions as a collapsible group
                         DisclosureGroup(isExpanded: $showPrevious) {
                             VStack(alignment: .leading, spacing: 8) {
+                                Group {
+                                    Text("v0.53").font(.subheadline).bold()
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Label("Faster, more reliable ZIP sharing for single entries", systemImage: "circle")
+                                        Label("Improved claim-all export: background ZIP build + progress overlay", systemImage: "circle")
+                                        Label("Invoice/Payment tags moved below thumbnails for better readability", systemImage: "circle")
+                                    }
+                                }
+                                Group {
+                                    Text("v0.52").font(.subheadline).bold()
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Label("Remove version badge from home (stuck display)", systemImage: "circle")
+                                        Label("Unify image attach flow: single button with camera or Photos", systemImage: "circle")
+                                        Label("Bump Marketing Version to 0.52", systemImage: "circle")
+                                    }
+                                }
                                 Group {
                                     Text("v0.5").font(.subheadline).bold()
                                     VStack(alignment: .leading, spacing: 4) {
@@ -987,7 +1075,6 @@ struct ExtrasView: View {
                             }
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "chevron.right")
@@ -999,7 +1086,6 @@ struct ExtrasView: View {
                         }
                     }
                     .padding(.vertical, 4)
-                    .animation(.snappy, value: showPrevious)
                 }
 
                 Section("Open Source") {
@@ -1103,16 +1189,11 @@ final class LocationHelper: NSObject, ObservableObject, CLLocationManagerDelegat
 }
 
 extension PhotosPickerItem {
-    func loadUIImageDownscaled(maxSide: CGFloat = 2000) async throws -> UIImage? {
-        guard let data = try await self.loadTransferable(type: Data.self), let image = UIImage(data: data) else { return nil }
-        let size = image.size
-        let scale = min(maxSide/size.width, maxSide/size.height, 1)
-        let newSize = CGSize(width: size.width*scale, height: size.height*scale)
-        UIGraphicsBeginImageContextWithOptions(newSize, true, 1)
-        image.draw(in: CGRect(origin: .zero, size: newSize))
-        let resized = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        return resized
+    /// Load and aggressively downscale from Photos so the longest side is ~1400 px.
+    func loadUIImageDownscaled(maxSide: CGFloat = 1400) async throws -> UIImage? {
+        guard let data = try await self.loadTransferable(type: Data.self),
+              let image = UIImage(data: data) else { return nil }
+        return image.downscaled(maxSide: maxSide)
     }
 }
 
@@ -1144,11 +1225,14 @@ struct Tag: View {
     var body: some View {
         Text(text)
             .font(.caption2)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(tint.opacity(0.15))
+            .bold()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.white).shadow(color: Color.black.opacity(0.08), radius: 2, x: 0, y: 1))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10).stroke(tint.opacity(0.15), lineWidth: 1)
+            )
             .foregroundStyle(tint)
-            .clipShape(Capsule())
     }
 }
 
@@ -1186,28 +1270,37 @@ extension Bundle {
 
 struct QRView: View {
     let string: String
-    private let context = CIContext()
-    private let filter = CIFilter.qrCodeGenerator()
+    @State private var image: UIImage? = nil
+
     var body: some View {
-        if let ui = generate() {
-            Image(uiImage: ui)
-                .interpolation(.none)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: 160, maxHeight: 160)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-        } else {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.quaternary)
-                .frame(width: 120, height: 120)
+        Group {
+            if let ui = image {
+                Image(uiImage: ui)
+                    .interpolation(.none)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 160, maxHeight: 160)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.quaternary)
+                    .frame(width: 120, height: 120)
+            }
+        }
+        .task {
+            guard image == nil else { return }
+            image = generate()
         }
     }
+
     private func generate() -> UIImage? {
         let data = Data(string.utf8)
-        filter.message = data
-        filter.correctionLevel = "M"
+        let filter = CIFilter.qrCodeGenerator()
+        filter.setValue(data, forKey: "inputMessage")
+        filter.setValue("M", forKey: "inputCorrectionLevel")
         guard let output = filter.outputImage else { return nil }
         let scaled = output.transformed(by: CGAffineTransform(scaleX: 6, y: 6))
+        let context = CIContext()
         if let cg = context.createCGImage(scaled, from: scaled.extent) {
             return UIImage(cgImage: cg)
         }
