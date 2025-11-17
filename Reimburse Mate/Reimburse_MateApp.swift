@@ -17,6 +17,7 @@ import CoreImage
 import CoreImage.CIFilterBuiltins
 import AVFoundation
 import ImageIO
+import UIKit
 
 @main
 struct ReimburseMateApp: App {
@@ -137,22 +138,26 @@ final class Reimbursement {
     }
 
     func invoiceDisplayImage(maxDimension: CGFloat = 2400) -> UIImage? {
+        let screenMax = max(UIScreen.main.bounds.width, UIScreen.main.bounds.height) * UIScreen.main.scale
+        let target = min(max(1600, screenMax), 2400)
         guard let data = invoiceImageData else { return nil }
         guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         let opts: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceThumbnailMaxPixelSize: Int(maxDimension),
+            kCGImageSourceThumbnailMaxPixelSize: Int(target),
             kCGImageSourceCreateThumbnailWithTransform: true
         ]
         guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
         return UIImage(cgImage: cg)
     }
     func paymentDisplayImage(maxDimension: CGFloat = 2400) -> UIImage? {
+        let screenMax = max(UIScreen.main.bounds.width, UIScreen.main.bounds.height) * UIScreen.main.scale
+        let target = min(max(1600, screenMax), 2400)
         guard let data = paymentImageData else { return nil }
         guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         let opts: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceThumbnailMaxPixelSize: Int(maxDimension),
+            kCGImageSourceThumbnailMaxPixelSize: Int(target),
             kCGImageSourceCreateThumbnailWithTransform: true
         ]
         guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
@@ -669,6 +674,12 @@ struct DetailView: View {
     @State var r: Reimbursement
     @State private var showPreview = false
     @State private var previewUIImage: UIImage? = nil
+    @State private var showingEntryMail = false
+    @State private var showingEntryShare = false
+    @State private var entryMailSubject: String = ""
+    @State private var entryMailBody: String = ""
+    @State private var entryMailAttachments: [MailView.MailAttachment] = []
+    @State private var entryShareItems: [Any] = []
 
     var body: some View {
         ScrollView {
@@ -687,9 +698,11 @@ struct DetailView: View {
                             .frame(maxWidth: .infinity)
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                if let full = r.invoiceDisplayImage(maxDimension: 2400) {
-                                    previewUIImage = full
-                                    showPreview = true
+                                previewUIImage = nil
+                                showPreview = true
+                                DispatchQueue.global(qos: .userInitiated).async {
+                                    let full = r.invoiceDisplayImage()
+                                    DispatchQueue.main.async { self.previewUIImage = full }
                                 }
                             }
                     }
@@ -706,9 +719,11 @@ struct DetailView: View {
                             .frame(maxWidth: .infinity)
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                if let full = r.paymentDisplayImage(maxDimension: 2400) {
-                                    previewUIImage = full
-                                    showPreview = true
+                                previewUIImage = nil
+                                showPreview = true
+                                DispatchQueue.global(qos: .userInitiated).async {
+                                    let full = r.paymentDisplayImage()
+                                    DispatchQueue.main.async { self.previewUIImage = full }
                                 }
                             }
                     }
@@ -737,7 +752,7 @@ struct DetailView: View {
         .navigationTitle("Entry")
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                ShareLink(item: r.shareText()) { Image(systemName: "square.and.arrow.up") }
+                Button { shareEntryZip() } label: { Image(systemName: "square.and.arrow.up") }
                 Button(role: .destructive) { showDeleteAlert = true } label: { Image(systemName: "trash") }
             }
         }
@@ -754,11 +769,69 @@ struct DetailView: View {
         .fullScreenCover(isPresented: $showPreview) {
             if let ui = previewUIImage {
                 ImagePreview(uiImage: ui)
+            } else {
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    VStack(spacing: 16) {
+                        ProgressView().tint(.white)
+                        Button("Close") { showPreview = false }
+                            .foregroundStyle(.white)
+                            .padding(.top, 4)
+                    }
+                }
             }
+        }
+        .sheet(isPresented: $showingEntryMail) {
+            MailView(subject: entryMailSubject, recipients: ["accounts@tcustudios.com"], body: entryMailBody, attachments: entryMailAttachments) { _ in }
+        }
+        .sheet(isPresented: $showingEntryShare) {
+            ActivityView(activityItems: entryShareItems)
         }
     }
 
     private func toggleStatus() { r.status = (r.status == .claimed ? .unclaimed : .claimed); try? context.save() }
+
+    private func shareEntryZip() {
+        // Subject/body
+        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd HH:mm"
+        entryMailSubject = "Reimbursement claim — \(r.projectCode) — \(df.string(from: r.date))"
+        entryMailBody = r.shareText()
+
+        // Files for zip
+        var files: [(name: String, data: Data)] = []
+
+        // CSV (single row + header)
+        let header = ["id","date","projectCode","note","status","placeName","coordinate","amount"].joined(separator: ",")
+        let row = r.csvRow()
+        if let csvData = ([header, row]).joined(separator: "\n").data(using: .utf8) {
+            files.append(("reimbursement.csv", csvData))
+        }
+
+        // Summary + images
+        let stamp = r.date.formatted(date: .numeric, time: .shortened).replacingOccurrences(of: "/", with: "-")
+        let safeProj = r.projectCode.replacingOccurrences(of: "/", with: "-")
+        if let txt = r.shareText().data(using: .utf8) {
+            files.append(("\(safeProj)-\(stamp)-summary.txt", txt))
+        }
+        if let inv = r.invoiceImageData { files.append(("\(safeProj)-\(stamp)-invoice.jpg", inv)) }
+        if let pay = r.paymentImageData { files.append(("\(safeProj)-\(stamp)-payment.jpg", pay)) }
+
+        guard let zipData = ZipBuilder.makeZip(named: "\(safeProj)-\(stamp).zip", files: files) else { return }
+
+        // Prepare for Mail
+        entryMailAttachments = [MailView.MailAttachment(data: zipData, mimeType: "application/zip", fileName: "\(safeProj)-\(stamp).zip")]
+
+        // Also write to temp URL for share sheet fallback
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(safeProj)-\(stamp).zip")
+        try? zipData.write(to: url, options: .atomic)
+        entryShareItems = [url]
+
+        if MailView.canSendMail() {
+            showingEntryMail = true
+        } else {
+            showingEntryShare = true
+        }
+    }
 }
 
 // MARK: - ThumbCache (for thumbnail caching)
