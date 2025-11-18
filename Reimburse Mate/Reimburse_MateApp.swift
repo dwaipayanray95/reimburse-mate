@@ -7,6 +7,7 @@
 // Optional (if you later save to Photos):
 //  • NSPhotoLibraryAddUsageDescription = "Allow saving receipts to Photo Library."
 
+import UniformTypeIdentifiers
 import SwiftUI
 import SwiftData
 import PhotosUI
@@ -64,8 +65,24 @@ final class Reimbursement {
     var amount: Double?
     @Attribute(.externalStorage) var invoiceImageData: Data? // invoice image
     @Attribute(.externalStorage) var paymentImageData: Data? // payment screenshot (was receiptImageData)
+    @Attribute(.externalStorage) var invoicePDFData: Data?   // optional invoice PDF
+    @Attribute(.externalStorage) var paymentPDFData: Data?   // optional payment proof PDF
 
-    init(id: UUID = UUID(), date: Date = .now, projectCode: String, note: String, status: ClaimStatus = .unclaimed, latitude: Double? = nil, longitude: Double? = nil, placeName: String? = nil, amount: Double? = nil, invoiceImageData: Data? = nil, paymentImageData: Data? = nil) {
+    init(
+        id: UUID = UUID(),
+        date: Date = .now,
+        projectCode: String,
+        note: String,
+        status: ClaimStatus = .unclaimed,
+        latitude: Double? = nil,
+        longitude: Double? = nil,
+        placeName: String? = nil,
+        amount: Double? = nil,
+        invoiceImageData: Data? = nil,
+        paymentImageData: Data? = nil,
+        invoicePDFData: Data? = nil,
+        paymentPDFData: Data? = nil
+    ) {
         self.id = id
         self.date = date
         self.projectCode = projectCode
@@ -77,6 +94,8 @@ final class Reimbursement {
         self.amount = amount
         self.invoiceImageData = invoiceImageData
         self.paymentImageData = paymentImageData
+        self.invoicePDFData = invoicePDFData
+        self.paymentPDFData = paymentPDFData
     }
 
     var status: ClaimStatus {
@@ -237,6 +256,8 @@ struct AddEntryView: View {
     @State private var paymentImage: UIImage? = nil
     @State private var amountString: String = ""
     @State private var isSaving = false
+    @State private var invoicePDFData: Data? = nil
+    @State private var paymentPDFData: Data? = nil
     @State private var showSavedToast = false
     @State private var showExtras = false
     @State private var showInvoiceCamera = false
@@ -245,8 +266,11 @@ struct AddEntryView: View {
     @State private var showPaymentSource = false
     @State private var showInvoicePhotoPicker = false
     @State private var showPaymentPhotoPicker = false
+    @State private var showInvoiceDocPicker = false
+    @State private var showPaymentDocPicker = false
     @State private var showCameraAlert = false
     @State private var cameraAlertMessage = ""
+    
 
     var body: some View {
         NavigationStack {
@@ -284,6 +308,26 @@ struct AddEntryView: View {
                                     .padding(6)
                             }
                     }
+
+                    Button {
+                        showInvoiceDocPicker = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "doc.richtext")
+                            Text(invoicePDFData == nil ? "Attach invoice PDF" : "Change invoice PDF")
+                        }
+                    }
+
+                    if invoicePDFData != nil {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.text")
+                                .foregroundStyle(.blue)
+                            Text("Invoice PDF attached")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                    }
                 }
 
                 Section("Payment Screenshot") {
@@ -319,6 +363,26 @@ struct AddEntryView: View {
                                     .padding(6)
                             }
                     }
+
+                    Button {
+                        showPaymentDocPicker = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "doc.richtext")
+                            Text(paymentPDFData == nil ? "Attach payment PDF" : "Change payment PDF")
+                        }
+                    }
+
+                    if paymentPDFData != nil {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.text")
+                                .foregroundStyle(.green)
+                            Text("Payment PDF attached")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                    }
                 }
 
                 Section("Details") {
@@ -352,7 +416,13 @@ struct AddEntryView: View {
                     Button(action: save) {
                         if isSaving { ProgressView() } else { Label("Save Entry", systemImage: "tray.and.arrow.down.fill") }
                     }
-                    .disabled(projectCode.trimmingCharacters(in: .whitespaces).isEmpty || invoiceImage == nil || paymentImage == nil || amountString.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled({
+                        let trimmedProject = projectCode.trimmingCharacters(in: .whitespaces)
+                        let trimmedAmount = amountString.trimmingCharacters(in: .whitespaces)
+                        let hasInvoice = (invoiceImage != nil) || (invoicePDFData != nil)
+                        let hasPayment = (paymentImage != nil) || (paymentPDFData != nil)
+                        return trimmedProject.isEmpty || trimmedAmount.isEmpty || !hasInvoice || !hasPayment
+                    }())
                 }
             }
             .scrollDismissesKeyboard(.interactively)
@@ -384,6 +454,16 @@ struct AddEntryView: View {
             }
             .photosPicker(isPresented: $showInvoicePhotoPicker, selection: $invoicePhotoItem, matching: .images)
             .photosPicker(isPresented: $showPaymentPhotoPicker, selection: $paymentPhotoItem, matching: .images)
+            .sheet(isPresented: $showInvoiceDocPicker) {
+                PDFPicker { data in
+                    invoicePDFData = data
+                }
+            }
+            .sheet(isPresented: $showPaymentDocPicker) {
+                PDFPicker { data in
+                    paymentPDFData = data
+                }
+            }
             .alert("Camera issue", isPresented: $showCameraAlert) {
                 Button("OK", role: .cancel) { }
             } message: {
@@ -412,7 +492,9 @@ struct AddEntryView: View {
             placeName: location.placemarkString,
             amount: amount,
             invoiceImageData: invoiceCompressed,
-            paymentImageData: paymentCompressed
+            paymentImageData: paymentCompressed,
+            invoicePDFData: invoicePDFData,
+            paymentPDFData: paymentPDFData
         )
         context.insert(model)
         try? context.save()
@@ -427,6 +509,8 @@ struct AddEntryView: View {
         paymentImage = nil
         invoicePhotoItem = nil
         paymentPhotoItem = nil
+        invoicePDFData = nil
+        paymentPDFData = nil
     }
 
     private func openInvoiceCamera() {
@@ -618,8 +702,14 @@ struct ListView: View {
                 if let inv = r.invoiceImageData {
                     files.append(("\(safeProj)-\(stamp)-invoice.jpg", inv))
                 }
+                if let invPDF = r.invoicePDFData {
+                    files.append(("\(safeProj)-\(stamp)-invoice.pdf", invPDF))
+                }
                 if let pay = r.paymentImageData {
                     files.append(("\(safeProj)-\(stamp)-payment.jpg", pay))
+                }
+                if let payPDF = r.paymentPDFData {
+                    files.append(("\(safeProj)-\(stamp)-payment.pdf", payPDF))
                 }
             }
 
@@ -869,8 +959,14 @@ struct DetailView: View {
             if let inv = r.invoiceImageData {
                 files.append(("\(safeProj)-\(stamp)-invoice.jpg", inv))
             }
+            if let invPDF = r.invoicePDFData {
+                files.append(("\(safeProj)-\(stamp)-invoice.pdf", invPDF))
+            }
             if let pay = r.paymentImageData {
                 files.append(("\(safeProj)-\(stamp)-payment.jpg", pay))
+            }
+            if let payPDF = r.paymentPDFData {
+                files.append(("\(safeProj)-\(stamp)-payment.pdf", payPDF))
             }
 
             let zipName = "\(safeProj)-\(stamp).zip"
@@ -1000,14 +1096,13 @@ struct ExtrasView: View {
 
                 Section("Changelog") {
                     VStack(alignment: .leading, spacing: 8) {
-                        // Latest version header (v0.54)
-                        Text("v0.54")
+                        // Latest version header (v0.55)
+                        Text("v0.55")
                             .font(.headline)
                         VStack(alignment: .leading, spacing: 4) {
-                            Label("Further optimise first launch & storage for large image attachments", systemImage: "checkmark.circle")
-                            Label("Faster Extras screen open and QR generation", systemImage: "checkmark.circle")
-                            Label("Smoother changelog expansion animation", systemImage: "checkmark.circle")
-                            Label("Update GitHub source link to @dwaipayanray95 repo", systemImage: "checkmark.circle")
+                            Label("Allow attaching optional PDF files for invoice and payment proof", systemImage: "checkmark.circle")
+                            Label("Export/claim ZIPs now include attached PDFs alongside images", systemImage: "checkmark.circle")
+                            Label("Relax Save rules: invoice/payment can be image or PDF", systemImage: "checkmark.circle")
                         }
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -1015,6 +1110,15 @@ struct ExtrasView: View {
                         // Previous versions as a collapsible group
                         DisclosureGroup(isExpanded: $showPrevious) {
                             VStack(alignment: .leading, spacing: 8) {
+                                Group {
+                                    Text("v0.54").font(.subheadline).bold()
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Label("Further optimise first launch & storage for large image attachments", systemImage: "circle")
+                                        Label("Faster Extras screen open and QR generation", systemImage: "circle")
+                                        Label("Smoother changelog expansion animation", systemImage: "circle")
+                                        Label("Update GitHub source link to @dwaipayanray95 repo", systemImage: "circle")
+                                    }
+                                }
                                 Group {
                                     Text("v0.53").font(.subheadline).bold()
                                     VStack(alignment: .leading, spacing: 4) {
@@ -1139,8 +1243,18 @@ struct ExportView: View {
             if let txt = r.shareText().data(using: .utf8) {
                 files.append(("\(safeProj)-\(stamp)-summary.txt", txt))
             }
-            if let inv = r.invoiceImageData { files.append(("\(safeProj)-\(stamp)-invoice.jpg", inv)) }
-            if let pay = r.paymentImageData { files.append(("\(safeProj)-\(stamp)-payment.jpg", pay)) }
+            if let inv = r.invoiceImageData {
+                files.append(("\(safeProj)-\(stamp)-invoice.jpg", inv))
+            }
+            if let invPDF = r.invoicePDFData {
+                files.append(("\(safeProj)-\(stamp)-invoice.pdf", invPDF))
+            }
+            if let pay = r.paymentImageData {
+                files.append(("\(safeProj)-\(stamp)-payment.jpg", pay))
+            }
+            if let payPDF = r.paymentPDFData {
+                files.append(("\(safeProj)-\(stamp)-payment.pdf", payPDF))
+            }
         }
         guard let zipData = ZipBuilder.makeZip(named: "reimbursements.zip", files: files) else { return }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("reimbursements.zip")
@@ -1341,6 +1455,46 @@ struct CameraPicker: UIViewControllerRepresentable {
     }
 }
 
+// MARK: - PDF Picker (UIDocumentPicker bridge)
+struct PDFPicker: UIViewControllerRepresentable {
+    var onPick: (Data) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.pdf], asCopy: true)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let parent: PDFPicker
+        init(_ parent: PDFPicker) { self.parent = parent }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            guard let url = urls.first else {
+                parent.dismiss()
+                return
+            }
+            do {
+                let data = try Data(contentsOf: url)
+                parent.onPick(data)
+            } catch {
+                // ignore read errors
+            }
+            parent.dismiss()
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            parent.dismiss()
+        }
+    }
+}
 // MARK: - Full-screen image preview (zoomable)
 struct ImagePreview: View {
     let uiImage: UIImage
