@@ -207,33 +207,62 @@ struct SplashView: View {
         GeometryReader { geo in
             let w = geo.size.width
             let titleSize = min(max(w * 0.10, 36), 56)      // scales with device width
-            let subtitleSize = min(max(w * 0.05, 15), 24)
+            let subtitleSize = min(max(w * 0.045, 14), 22)
             ZStack {
+                // Background gradient + soft blobs for a more modern feel
                 LinearGradient(
-                    gradient: Gradient(colors: [Color(.systemBackground), Color(.secondarySystemBackground)]),
+                    gradient: Gradient(colors: [
+                        Color(.systemIndigo),
+                        Color(.systemBackground),
+                        Color(.systemTeal)
+                    ]),
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
                 .ignoresSafeArea()
-
-                VStack(spacing: 12) {
-                    Text("Reimburse Mate")
-                        .font(.system(size: titleSize, weight: .heavy, design: .rounded))
-                        .kerning(0.5)
-                        .minimumScaleFactor(0.6)
-                        .lineLimit(1)
-                        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 1)
-
-                    Text("an app by @theawesomeray")
-                        .font(.system(size: subtitleSize, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
-                        .minimumScaleFactor(0.7)
-                        .lineLimit(1)
+                
+                Circle()
+                    .fill(Color.white.opacity(0.12))
+                    .blur(radius: 40)
+                    .frame(width: w * 0.9, height: w * 0.9)
+                    .offset(x: -w * 0.3, y: -w * 0.4)
+                
+                Circle()
+                    .fill(Color.black.opacity(0.18))
+                    .blur(radius: 60)
+                    .frame(width: w * 0.8, height: w * 0.8)
+                    .offset(x: w * 0.35, y: w * 0.35)
+                
+                VStack(spacing: 18) {
+                    // Simple "logo" glyph
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .frame(width: 76, height: 76)
+                            .shadow(color: .black.opacity(0.25), radius: 6, x: 0, y: 4)
+                        Image(systemName: "indianrupeesign.circle.fill")
+                            .font(.system(size: 36, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    
+                    VStack(spacing: 8) {
+                        Text("REIMBURSE MATE")
+                            .font(.custom("Poppins-Bold", size: titleSize))
+                            .kerning(1.2)
+                            .minimumScaleFactor(0.6)
+                            .lineLimit(1)
+                            .foregroundStyle(.white)
+                            .shadow(color: .black.opacity(0.35), radius: 6, x: 0, y: 3)
+                        
+                        Text("AN APP BY @THEAWESOMERAY")
+                            .font(.custom("Poppins-SemiBold", size: subtitleSize))
+                            .kerning(1.0)
+                            .foregroundStyle(Color.white.opacity(0.85))
+                            .minimumScaleFactor(0.7)
+                            .lineLimit(1)
+                    }
                 }
                 .padding(.horizontal, 24)
-                .padding(.vertical, 14)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-                .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 4)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -1048,6 +1077,7 @@ struct ExtrasView: View {
     private let upiID = "9916268695@ptaxis"
     private let upiDeepLink = "upi://pay?pa=9916268695@ptaxis&pn=Ray&cu=INR"
     private let sourceURL = URL(string: "https://github.com/dwaipayanray95/reimburse-mate")!
+    private let instagramURL = URL(string: "https://instagram.com/theawesomeray")!
     @State private var showPrevious = false
 
     var body: some View {
@@ -1180,6 +1210,18 @@ struct ExtrasView: View {
                     Link(destination: sourceURL) {
                         Label("Source on GitHub", systemImage: "link")
                     }
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 4) {
+                            Text("made with")
+                            Text("<3")
+                            Text("by")
+                            Link("@theawesomeray", destination: instagramURL)
+                            Text("· coded via ChatGPT.")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
                 }
             }
             .navigationTitle("Extras")
