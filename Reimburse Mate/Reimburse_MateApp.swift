@@ -275,18 +275,19 @@ struct AddEntryView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Invoice Image") {
+                Section("Invoice") {
                     Button {
                         showInvoiceSource = true
                     } label: {
                         HStack {
                             Image(systemName: "doc.text.image")
-                            Text(invoiceImage == nil ? "Add invoice image" : "Change invoice image")
+                            Text((invoiceImage != nil || invoicePDFData != nil) ? "Change invoice" : "Add invoice")
                         }
                     }
-                    .confirmationDialog("Invoice image", isPresented: $showInvoiceSource, titleVisibility: .visible) {
+                    .confirmationDialog("Invoice", isPresented: $showInvoiceSource, titleVisibility: .visible) {
                         Button("Take Photo") { openInvoiceCamera() }
                         Button("Choose from Photos") { showInvoicePhotoPicker = true }
+                        Button("Attach PDF from Files") { showInvoiceDocPicker = true }
                         Button("Cancel", role: .cancel) {}
                     }
                     .onChange(of: invoicePhotoItem) { old, newItem in
@@ -309,15 +310,6 @@ struct AddEntryView: View {
                             }
                     }
 
-                    Button {
-                        showInvoiceDocPicker = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "doc.richtext")
-                            Text(invoicePDFData == nil ? "Attach invoice PDF" : "Change invoice PDF")
-                        }
-                    }
-
                     if invoicePDFData != nil {
                         HStack(spacing: 6) {
                             Image(systemName: "doc.text")
@@ -330,18 +322,19 @@ struct AddEntryView: View {
                     }
                 }
 
-                Section("Payment Screenshot") {
+                Section("Payment Proof") {
                     Button {
                         showPaymentSource = true
                     } label: {
                         HStack {
                             Image(systemName: "photo")
-                            Text(paymentImage == nil ? "Add payment image" : "Change payment image")
+                            Text((paymentImage != nil || paymentPDFData != nil) ? "Change payment proof" : "Add payment proof")
                         }
                     }
-                    .confirmationDialog("Payment image", isPresented: $showPaymentSource, titleVisibility: .visible) {
+                    .confirmationDialog("Payment Proof", isPresented: $showPaymentSource, titleVisibility: .visible) {
                         Button("Take Photo") { openPaymentCamera() }
                         Button("Choose from Photos") { showPaymentPhotoPicker = true }
+                        Button("Attach PDF from Files") { showPaymentDocPicker = true }
                         Button("Cancel", role: .cancel) {}
                     }
                     .onChange(of: paymentPhotoItem) { old, newItem in
@@ -362,15 +355,6 @@ struct AddEntryView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
                                     .padding(6)
                             }
-                    }
-
-                    Button {
-                        showPaymentDocPicker = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "doc.richtext")
-                            Text(paymentPDFData == nil ? "Attach payment PDF" : "Change payment PDF")
-                        }
                     }
 
                     if paymentPDFData != nil {
