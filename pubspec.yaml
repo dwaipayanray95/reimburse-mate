@@ -1,0 +1,76 @@
+name: reimburse_mate
+description: "Smart reimbursements, simplified."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # ── State Management ──
+  flutter_riverpod: ^2.6.1
+
+  # ── Database ──
+  drift: ^2.20.0
+  sqlite3_flutter_libs: ^0.5.24
+  path_provider: ^2.1.3
+  path: ^1.9.0
+
+  # ── OCR ──
+  google_mlkit_text_recognition: ^0.14.0
+
+  # ── File Picking & Attachment ──
+  image_picker: ^1.1.2
+  file_picker: ^8.0.0
+  flutter_image_compress: ^2.3.0
+
+  # ── PDF viewing ──
+  pdfrx: ^1.0.0
+
+  # ── CSV export ──
+  csv: ^6.0.0
+
+  # ── ZIP / Archive ──
+  archive: ^3.6.1
+
+  # ── Email & Share ──
+  flutter_email_sender: ^6.0.2
+  share_plus: ^10.0.0
+  url_launcher: ^6.3.0
+
+  # ── Currency ──
+  currency_picker: ^2.0.21
+  intl: ^0.19.0
+
+  # ── UI & Theming ──
+  google_fonts: ^6.2.1
+  dynamic_color: ^1.7.0
+  flutter_animate: ^4.5.0
+  shimmer: ^3.0.0
+
+  # ── Charts (Dashboard) ──
+  fl_chart: ^0.69.0
+
+  # ── Utilities ──
+  uuid: ^4.4.0
+  shared_preferences: ^2.2.3
+  collection: ^1.18.0
+  permission_handler: ^11.3.0
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  drift_dev: ^2.20.0
+  build_runner: ^2.4.11
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/animations/
