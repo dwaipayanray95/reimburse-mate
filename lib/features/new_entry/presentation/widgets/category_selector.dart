@@ -33,9 +33,16 @@ class CategorySelector extends StatelessWidget {
             ),
             selected: isSelected,
             onSelected: (_) => onCategorySelected(cat),
+            showCheckmark: false,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide.none,
+            ),
+            side: BorderSide.none,
+            backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
             selectedColor: cat.color,
             labelStyle: TextStyle(
-              color: isSelected ? Colors.white : const Color(0xFF334155),
+              color: isSelected ? Colors.white : Theme.of(context).colorScheme.onSurface.withOpacity(0.75),
               fontWeight: FontWeight.bold,
             ),
           );

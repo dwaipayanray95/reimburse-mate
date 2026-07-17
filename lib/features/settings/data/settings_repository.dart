@@ -6,6 +6,7 @@ class SettingsRepository {
   static const String _keyCurrency = 'settings_default_currency';
   static const String _keyName = 'settings_user_name';
   static const String _keyCompany = 'settings_company_name';
+  static const String _keyThemeMode = 'settings_theme_mode'; // NEW
 
   final SharedPreferences _prefs;
 
@@ -25,4 +26,7 @@ class SettingsRepository {
 
   String get companyName => _prefs.getString(_keyCompany) ?? 'My Company';
   Future<bool> setCompanyName(String val) => _prefs.setString(_keyCompany, val);
+
+  String get themeMode => _prefs.getString(_keyThemeMode) ?? 'system'; // 'system' | 'light' | 'dark'
+  Future<bool> setThemeMode(String val) => _prefs.setString(_keyThemeMode, val);
 }

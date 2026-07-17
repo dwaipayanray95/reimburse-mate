@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:reimburse_mate/core/utils/file_picker_service.dart';
 import 'package:reimburse_mate/core/widgets/file_attachment_widget.dart';
+import 'package:reimburse_mate/core/widgets/dashed_border_painter.dart';
 import 'package:reimburse_mate/models/payment_method.dart';
 
 class PaymentSection extends StatelessWidget {
@@ -33,32 +34,43 @@ class PaymentSection extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         
-        // Method Selector
-        LayoutBuilder(
-          builder: (context, constraints) {
-            return ToggleButtons(
-              constraints: BoxConstraints(
-                minWidth: (constraints.maxWidth - 5) / 4,
-                minHeight: 40,
-              ),
-              borderRadius: BorderRadius.circular(12),
-              isSelected: PaymentMethod.values.map((m) => m == selectedMethod).toList(),
-              onPressed: (index) => onMethodChanged(PaymentMethod.values[index]),
-              children: PaymentMethod.values.map((m) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(m.icon, size: 16),
-                      const SizedBox(width: 4),
-                      Text(m.label, style: const TextStyle(fontSize: 12)),
-                    ],
+        // Method Selector — 4 equal-width segmented buttons
+        Row(
+          children: PaymentMethod.values.map((m) {
+            final isSelected = m == selectedMethod;
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                child: InkWell(
+                  onTap: () => onMethodChanged(m),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10.0),
+                    decoration: BoxDecoration(
+                      color: isSelected ? theme.colorScheme.primary : theme.colorScheme.surfaceContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(m.icon, size: 16, color: isSelected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface),
+                        const SizedBox(height: 4),
+                        Text(
+                          m.label,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                );
-              }).toList(),
+                ),
+              ),
             );
-          },
+          }).toList(),
         ),
         const SizedBox(height: 16),
 
@@ -83,13 +95,19 @@ class PaymentSection extends StatelessWidget {
               subtitle: 'Payment Proof',
             )
           else
-            OutlinedButton.icon(
-              onPressed: onPickPressed,
-              icon: const Icon(Icons.receipt_rounded),
-              label: const Text('Add Payment Proof (UPI/Transaction Screen)'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            DashedDropZone(
+              onTap: onPickPressed,
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.receipt_rounded, size: 32, color: Colors.grey),
+                  SizedBox(height: 8),
+                  Text(
+                    'Add Payment Proof (UPI/Transaction Screen)',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                ],
               ),
             ),
         ] else ...[
@@ -106,13 +124,19 @@ class PaymentSection extends StatelessWidget {
               subtitle: 'Cash Payment Receipt',
             )
           else
-            OutlinedButton.icon(
-              onPressed: onPickPressed,
-              icon: const Icon(Icons.receipt_rounded),
-              label: const Text('Add Optional Cash Receipt'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            DashedDropZone(
+              onTap: onPickPressed,
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.receipt_rounded, size: 32, color: Colors.grey),
+                  SizedBox(height: 8),
+                  Text(
+                    'Add Optional Cash Receipt',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                ],
               ),
             ),
         ],

@@ -30,7 +30,7 @@ class _FileClaimsScreenState extends ConsumerState<FileClaimsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final settings = ref.read(settingsProvider);
       
-      final totalAmount = widget.claims.map((e) => e.amount ?? 0.0).reduce((a, b) => a + b);
+      final totalAmount = widget.claims.fold<double>(0.0, (sum, e) => sum + (e.amount ?? 0.0));
       final formatter = NumberFormat.simpleCurrency(name: settings.defaultCurrency);
       
       _emailController.text = settings.recipientEmail;
@@ -67,9 +67,15 @@ class _FileClaimsScreenState extends ConsumerState<FileClaimsScreen> {
     final filingState = ref.read(filingNotifierProvider);
     if (filingState.status == FilingStateStatus.completed) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Claims successfully processed and status updated.')),
-        );
+        final missing = filingState.missingAttachmentCount;
+        final message = exportOnly
+            ? (missing > 0
+                ? 'ZIP saved, but $missing attachment(s) were missing and skipped.'
+                : 'ZIP saved successfully.')
+            : (missing > 0
+                ? 'Claims filed, but $missing attachment(s) were missing and skipped.'
+                : 'Claims successfully processed and status updated.');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
         Navigator.pop(context);
       }
     } else if (filingState.status == FilingStateStatus.error && mounted) {
@@ -85,7 +91,7 @@ class _FileClaimsScreenState extends ConsumerState<FileClaimsScreen> {
     final isBusy = filingState.status == FilingStateStatus.generating ||
         filingState.status == FilingStateStatus.launching;
 
-    final totalVal = widget.claims.map((e) => e.amount ?? 0.0).reduce((a, b) => a + b);
+    final totalVal = widget.claims.fold<double>(0.0, (sum, e) => sum + (e.amount ?? 0.0));
     final defaultCurrency = ref.watch(settingsProvider).defaultCurrency;
 
     return Scaffold(
@@ -108,16 +114,24 @@ class _FileClaimsScreenState extends ConsumerState<FileClaimsScreen> {
               children: [
                 // Claim aggregation summary card
                 Card(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.all(20.0),
                     child: Column(
                       children: [
-                        const Text('Aggregate Claims Size', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
+                        Text(
+                          'Aggregate Claims Size',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         Text(
                           NumberFormat.simpleCurrency(name: defaultCurrency).format(totalVal),
                           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 26,
                                 color: Theme.of(context).colorScheme.primary,
                               ),
                         ),
@@ -132,30 +146,21 @@ class _FileClaimsScreenState extends ConsumerState<FileClaimsScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Form Fields
+                // Form Fields (read-only-styled, surface-container fill)
                 TextFormField(
                   controller: _emailController,
-                  decoration: const InputDecoration(
-                    labelText: 'Recipient Email Address',
-                    border: OutlineInputBorder(),
-                  ),
+                  decoration: _fieldDecoration(context, 'Recipient Email Address'),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _subjectController,
-                  decoration: const InputDecoration(
-                    labelText: 'Email Subject',
-                    border: OutlineInputBorder(),
-                  ),
+                  decoration: _fieldDecoration(context, 'Email Subject'),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _bodyController,
                   maxLines: 8,
-                  decoration: const InputDecoration(
-                    labelText: 'Email Body Template',
-                    border: OutlineInputBorder(),
-                  ),
+                  decoration: _fieldDecoration(context, 'Email Body Template'),
                 ),
                 const SizedBox(height: 16),
 
@@ -180,10 +185,12 @@ class _FileClaimsScreenState extends ConsumerState<FileClaimsScreen> {
                       child: OutlinedButton.icon(
                         onPressed: () => _triggerFiling(true),
                         icon: const Icon(Icons.folder_zip_rounded),
-                        label: const Text('Save / Share ZIP'),
+                        label: const Text('Save ZIP'),
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size(0, 50),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          side: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.5),
+                          foregroundColor: Theme.of(context).colorScheme.primary,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         ),
                       ),
                     ),
@@ -196,8 +203,8 @@ class _FileClaimsScreenState extends ConsumerState<FileClaimsScreen> {
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size(0, 50),
                           backgroundColor: Theme.of(context).colorScheme.primary,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         ),
                       ),
                     ),
@@ -205,6 +212,27 @@ class _FileClaimsScreenState extends ConsumerState<FileClaimsScreen> {
                 ),
               ],
             ),
+    );
+  }
+
+  InputDecoration _fieldDecoration(BuildContext context, String label) {
+    final theme = Theme.of(context);
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: theme.colorScheme.surfaceContainer,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: theme.colorScheme.outline),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: theme.colorScheme.outline),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+      ),
     );
   }
 }

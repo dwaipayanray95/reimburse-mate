@@ -13,6 +13,9 @@ class FilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final unselectedColor = theme.colorScheme.onSurface.withOpacity(0.7);
+
     return Container(
       height: 40,
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -28,9 +31,16 @@ class FilterBar extends StatelessWidget {
               label: const Text('All Claims'),
               selected: isAll,
               onSelected: (_) => onStatusChanged(null),
-              selectedColor: Theme.of(context).colorScheme.primary,
+              showCheckmark: false,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide.none,
+              ),
+              backgroundColor: theme.colorScheme.surfaceContainer,
+              side: BorderSide.none,
+              selectedColor: theme.colorScheme.primary,
               labelStyle: TextStyle(
-                color: isAll ? Colors.white : const Color(0xFF334155),
+                color: isAll ? theme.colorScheme.onPrimary : unselectedColor,
                 fontWeight: FontWeight.bold,
               ),
             );
@@ -43,9 +53,16 @@ class FilterBar extends StatelessWidget {
             label: Text(status.label),
             selected: isSelected,
             onSelected: (_) => onStatusChanged(status),
+            showCheckmark: false,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide.none,
+            ),
+            backgroundColor: theme.colorScheme.surfaceContainer,
+            side: BorderSide.none,
             selectedColor: status.color,
             labelStyle: TextStyle(
-              color: isSelected ? Colors.white : const Color(0xFF334155),
+              color: isSelected ? Colors.white : unselectedColor,
               fontWeight: FontWeight.bold,
             ),
           );

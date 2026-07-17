@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:pdfrx/pdfrx.dart';
 
 class FileAttachmentWidget extends StatelessWidget {
   final String path;

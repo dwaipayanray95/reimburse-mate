@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:reimburse_mate/core/widgets/glass_card.dart';
 import 'package:reimburse_mate/core/widgets/animated_counter.dart';
 
 class StatCard extends StatelessWidget {
@@ -24,9 +23,13 @@ class StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return GlassCard(
-      opacity: 0.05,
+    return Container(
+      constraints: const BoxConstraints(minHeight: 96),
       padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(20),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -34,14 +37,25 @@ class StatCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
                 ),
               ),
-              Icon(icon, color: tintColor, size: 20),
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: tintColor.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: tintColor, size: 16),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -50,8 +64,9 @@ class StatCard extends StatelessWidget {
             prefix: prefix,
             suffix: suffix,
             style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
+              fontWeight: FontWeight.w800,
+              fontSize: 20,
+              letterSpacing: -0.3,
             ),
           ),
         ],

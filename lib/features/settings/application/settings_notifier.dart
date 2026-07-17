@@ -7,6 +7,7 @@ class SettingsState {
   final String defaultCurrency;
   final String userName;
   final String companyName;
+  final String themeMode; // 'system' | 'light' | 'dark'
 
   SettingsState({
     required this.recipientEmail,
@@ -14,6 +15,7 @@ class SettingsState {
     required this.defaultCurrency,
     required this.userName,
     required this.companyName,
+    required this.themeMode,
   });
 
   SettingsState copyWith({
@@ -22,6 +24,7 @@ class SettingsState {
     String? defaultCurrency,
     String? userName,
     String? companyName,
+    String? themeMode,
   }) {
     return SettingsState(
       recipientEmail: recipientEmail ?? this.recipientEmail,
@@ -29,6 +32,7 @@ class SettingsState {
       defaultCurrency: defaultCurrency ?? this.defaultCurrency,
       userName: userName ?? this.userName,
       companyName: companyName ?? this.companyName,
+      themeMode: themeMode ?? this.themeMode,
     );
   }
 }
@@ -43,6 +47,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
           defaultCurrency: _repository.defaultCurrency,
           userName: _repository.userName,
           companyName: _repository.companyName,
+          themeMode: _repository.themeMode,
         ));
 
   Future<void> updateRecipientEmail(String val) async {
@@ -68,5 +73,10 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   Future<void> updateCompanyName(String val) async {
     await _repository.setCompanyName(val);
     state = state.copyWith(companyName: val);
+  }
+
+  Future<void> updateThemeMode(String val) async {
+    await _repository.setThemeMode(val);
+    state = state.copyWith(themeMode: val);
   }
 }

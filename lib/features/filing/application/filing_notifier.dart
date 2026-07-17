@@ -12,8 +12,9 @@ enum FilingStateStatus { idle, generating, launching, completed, error }
 class FilingState {
   final FilingStateStatus status;
   final String? errorMessage;
+  final int missingAttachmentCount;
 
-  FilingState({required this.status, this.errorMessage});
+  FilingState({required this.status, this.errorMessage, this.missingAttachmentCount = 0});
 }
 
 class FilingNotifier extends StateNotifier<FilingState> {
@@ -34,18 +35,22 @@ class FilingNotifier extends StateNotifier<FilingState> {
   }) async {
     state = FilingState(status: FilingStateStatus.generating);
     try {
-      final zipFile = await _zipService.createReimbursementsZip(claims);
-      if (zipFile == null) {
+      final zipResult = await _zipService.createReimbursementsZip(claims);
+      if (zipResult == null) {
         state = FilingState(status: FilingStateStatus.error, errorMessage: 'Failed to create export archive.');
         return;
       }
+      final zipFile = zipResult.zipFile;
 
       if (exportOnly) {
         state = FilingState(status: FilingStateStatus.launching);
         await _emailService.shareZipOnly(zipFile.path);
+        // A local "Save ZIP" export is just a backup — it doesn't mean the
+        // claim has actually been filed, so status is intentionally left
+        // untouched here (unlike the "Send via Mail" path below).
       } else {
         state = FilingState(status: FilingStateStatus.launching);
-        
+
         // Assemble attachments
         final List<String> attachments = [];
         if (attachZip) {
@@ -66,13 +71,16 @@ class FilingNotifier extends StateNotifier<FilingState> {
           body: body,
           attachmentPaths: attachments,
         );
+
+        // Mark claims as submitted only for an actual filing send.
+        final ids = claims.map((c) => c.id).toList();
+        await _claimsNotifier.batchUpdateStatus(ids, ClaimStatus.submitted);
       }
 
-      // Mark claims as submitted in database
-      final ids = claims.map((c) => c.id).toList();
-      await _claimsNotifier.batchUpdateStatus(ids, ClaimStatus.submitted);
-
-      state = FilingState(status: FilingStateStatus.completed);
+      state = FilingState(
+        status: FilingStateStatus.completed,
+        missingAttachmentCount: zipResult.missingAttachmentCount,
+      );
     } catch (e) {
       state = FilingState(status: FilingStateStatus.error, errorMessage: e.toString());
     }

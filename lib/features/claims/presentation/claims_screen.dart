@@ -65,7 +65,10 @@ class ClaimsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Claims', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          'Claims',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, fontSize: 20),
+        ),
         actions: [
           PopupMenuButton<SortOption>(
             icon: const Icon(Icons.sort_rounded),
@@ -77,6 +80,16 @@ class ClaimsScreen extends ConsumerWidget {
               const PopupMenuItem(value: SortOption.amountLowest, child: Text('Lowest Amount')),
               const PopupMenuItem(value: SortOption.project, child: Text('Project Name')),
             ],
+          ),
+          TextButton(
+            onPressed: () {
+              if (selectState.isMultiSelectMode) {
+                ref.read(multiSelectProvider.notifier).clearSelection();
+              } else {
+                ref.read(multiSelectProvider.notifier).enterSelectMode();
+              }
+            },
+            child: Text(selectState.isMultiSelectMode ? 'Cancel' : 'Select'),
           ),
         ],
       ),
@@ -95,10 +108,20 @@ class ClaimsScreen extends ConsumerWidget {
               decoration: InputDecoration(
                 hintText: 'Search claims...',
                 prefixIcon: const Icon(Icons.search_rounded),
+                filled: true,
+                fillColor: Theme.of(context).colorScheme.surfaceContainer,
                 contentPadding: const EdgeInsets.symmetric(vertical: 0),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.5),
                 ),
               ),
               onChanged: (val) => ref.read(filterProvider.notifier).setSearchQuery(val),
@@ -151,7 +174,7 @@ class ClaimsScreen extends ConsumerWidget {
                     ),
 
                     // Slide up action bar
-                    if (selectState.isMultiSelectMode)
+                    if (selectState.selectedIds.isNotEmpty)
                       Positioned(
                         bottom: 0,
                         left: 0,

@@ -20,16 +20,29 @@ void main() async {
   );
 }
 
-class ReimburseMateApp extends StatelessWidget {
+class ReimburseMateApp extends ConsumerWidget {
   const ReimburseMateApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    ThemeMode themeMode;
+    switch (settings.themeMode) {
+      case 'light':
+        themeMode = ThemeMode.light;
+        break;
+      case 'dark':
+        themeMode = ThemeMode.dark;
+        break;
+      default:
+        themeMode = ThemeMode.system;
+    }
+
     return MaterialApp(
       title: 'Reimburse Mate',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: themeMode,
       home: const SplashScreen(),
       debugShowCheckedModeBanner: false,
     );

@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter_email_sender/flutter_email_sender.dart';
 import 'package:share_plus/share_plus.dart';
 

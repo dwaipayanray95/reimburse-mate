@@ -36,6 +36,10 @@ class MultiSelectNotifier extends StateNotifier<MultiSelectState> {
     );
   }
 
+  void enterSelectMode() {
+    state = MultiSelectState(selectedIds: {}, isMultiSelectMode: true);
+  }
+
   void selectAll(List<String> ids) {
     state = state.copyWith(
       selectedIds: Set<String>.from(ids),

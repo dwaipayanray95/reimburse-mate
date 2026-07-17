@@ -27,8 +27,16 @@ class ClaimListTile extends StatelessWidget {
     final category = ExpenseCategory.fromDbKey(item.category);
     final currencyFmt = NumberFormat.simpleCurrency(name: item.currency);
 
+    final theme = Theme.of(context);
+
     return Card(
       elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: isSelected
+            ? BorderSide(color: theme.colorScheme.primary, width: 1.5)
+            : BorderSide.none,
+      ),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: ListTile(
         onTap: onTap,

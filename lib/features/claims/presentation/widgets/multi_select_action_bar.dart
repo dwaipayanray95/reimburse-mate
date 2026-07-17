@@ -21,7 +21,7 @@ class MultiSelectActionBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: theme.brightness == Brightness.light ? Colors.white : const Color(0xFF0F172A),
+        color: theme.colorScheme.surfaceContainer,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.08),
@@ -29,7 +29,7 @@ class MultiSelectActionBar extends StatelessWidget {
             offset: const Offset(0, -4),
           ),
         ],
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Row(
         children: [
@@ -54,8 +54,8 @@ class MultiSelectActionBar extends StatelessWidget {
             label: const Text('File Claims'),
             style: ElevatedButton.styleFrom(
               backgroundColor: theme.colorScheme.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              foregroundColor: theme.colorScheme.onPrimary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
           ),
         ],

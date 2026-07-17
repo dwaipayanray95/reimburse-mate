@@ -97,7 +97,7 @@ final filingNotifierProvider = StateNotifierProvider<FilingNotifier, FilingState
 });
 
 // Entry
-final entryNotifierProvider = StateNotifierProvider<EntryNotifier, bool>((ref) {
+final entryNotifierProvider = StateNotifierProvider<EntryNotifier, EntrySaveState>((ref) {
   final repo = ref.watch(claimsRepositoryProvider);
   return EntryNotifier(repo);
 });

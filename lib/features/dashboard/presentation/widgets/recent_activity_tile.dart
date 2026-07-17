@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:reimburse_mate/core/database/app_database.dart';
 import 'package:reimburse_mate/models/claim_status.dart';
+import 'package:reimburse_mate/models/expense_category.dart';
 import 'package:reimburse_mate/core/widgets/status_chip.dart';
 
 class RecentActivityTile extends StatelessWidget {
@@ -17,11 +18,21 @@ class RecentActivityTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = ClaimStatus.fromDbKey(item.status);
+    final category = ExpenseCategory.fromDbKey(item.category);
     final currencyFormat = NumberFormat.simpleCurrency(name: item.currency);
 
     return ListTile(
       onTap: onTap,
       contentPadding: EdgeInsets.zero,
+      leading: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: category.color.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(category.icon, color: category.color, size: 18),
+      ),
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [

@@ -9,6 +9,7 @@ class DashboardStats {
   final double averageClaimSize;
   final List<MapEntry<String, double>> monthlySpend;
   final Map<ClaimStatus, int> statusBreakdown;
+  final Map<String, double> projectSpend; // NEW
 
   DashboardStats({
     required this.totalPending,
@@ -17,6 +18,7 @@ class DashboardStats {
     required this.averageClaimSize,
     required this.monthlySpend,
     required this.statusBreakdown,
+    required this.projectSpend,
   });
 }
 
@@ -29,6 +31,7 @@ class DashboardNotifier extends StateNotifier<DashboardStats> {
           averageClaimSize: 0.0,
           monthlySpend: [],
           statusBreakdown: {},
+          projectSpend: {},
         ));
 
   void updateStats(List<Reimbursement> claims) {
@@ -43,6 +46,7 @@ class DashboardNotifier extends StateNotifier<DashboardStats> {
     }
 
     final monthlyDataMap = <String, double>{};
+    final projectDataMap = <String, double>{}; // NEW
 
     for (final claim in claims) {
       final amt = claim.amount ?? 0.0;
@@ -64,17 +68,36 @@ class DashboardNotifier extends StateNotifier<DashboardStats> {
         thisMonthClaims++;
       }
 
-      // Monthly aggregation (last 6 months)
-      final monthName = _getMonthName(claim.date.month);
-      monthlyDataMap[monthName] = (monthlyDataMap[monthName] ?? 0.0) + amt;
+      // Monthly aggregation (last 6 months) — keyed by year+month so
+      // different years never collapse into the same bucket.
+      final monthKey = '${claim.date.year}-${claim.date.month.toString().padLeft(2, '0')}';
+      monthlyDataMap[monthKey] = (monthlyDataMap[monthKey] ?? 0.0) + amt;
+
+      // Project code aggregation
+      final projCode = claim.projectCode.trim().toUpperCase();
+      if (projCode.isNotEmpty) {
+        projectDataMap[projCode] = (projectDataMap[projCode] ?? 0.0) + amt;
+      }
     }
 
-    final avgSize = claims.isEmpty ? 0.0 : (claims.map((e) => e.amount ?? 0.0).reduce((a, b) => a + b) / claims.length);
+    final avgSize = claims.isEmpty
+        ? 0.0
+        : claims.fold<double>(0.0, (sum, e) => sum + (e.amount ?? 0.0)) / claims.length;
 
-    // Prepare monthly list sorted by calendar progression
-    final monthsList = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final sortedMonthlySpend = monthlyDataMap.entries.toList()
-      ..sort((a, b) => monthsList.indexOf(a.key).compareTo(monthsList.indexOf(b.key)));
+    // Sort chronologically by the "YYYY-MM" key, keep the most recent 6
+    // months, then relabel for display as "MMM 'yy" so different years
+    // are still visually distinguishable.
+    final sortedEntries = monthlyDataMap.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    final recentEntries = sortedEntries.length > 6
+        ? sortedEntries.sublist(sortedEntries.length - 6)
+        : sortedEntries;
+    final sortedMonthlySpend = recentEntries.map((entry) {
+      final parts = entry.key.split('-');
+      final year = int.parse(parts[0]);
+      final month = int.parse(parts[1]);
+      final label = '${_getMonthName(month)} \'${(year % 100).toString().padLeft(2, '0')}';
+      return MapEntry(label, entry.value);
+    }).toList();
 
     state = DashboardStats(
       totalPending: pendingSum,
@@ -83,6 +106,7 @@ class DashboardNotifier extends StateNotifier<DashboardStats> {
       averageClaimSize: avgSize,
       monthlySpend: sortedMonthlySpend,
       statusBreakdown: statusMap,
+      projectSpend: projectDataMap,
     );
   }
 

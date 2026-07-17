@@ -36,8 +36,35 @@ class Reimbursements extends Table {
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
+  // Bumped from 1 -> 2 to force onUpgrade to run for installs whose local
+  // reimbursements.db predates columns like `particulars` (schemaVersion
+  // had stayed at 1 even as the table gained columns, so Drift never
+  // reconciled the on-disk schema and every insert failed with
+  // "table reimbursements has no column named ...").
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (Migrator m) => m.createAll(),
+        onUpgrade: (Migrator m, int from, int to) => _reconcileColumns(m),
+        // Defensive net: even if a future change forgets to bump
+        // schemaVersion, this repairs any missing columns on every launch
+        // so local data never silently fails to save again.
+        beforeOpen: (details) => _reconcileColumns(Migrator(this)),
+      );
+
+  /// Adds any column defined on [reimbursements] that is missing from the
+  /// on-disk table, without touching columns/data that already exist.
+  Future<void> _reconcileColumns(Migrator m) async {
+    final rows = await customSelect('PRAGMA table_info(reimbursements)').get();
+    final existingColumns = rows.map((r) => r.data['name'] as String).toSet();
+    for (final column in reimbursements.$columns) {
+      if (!existingColumns.contains(column.name)) {
+        await m.addColumn(reimbursements, column);
+      }
+    }
+  }
 }
 
 LazyDatabase _openConnection() {

@@ -3,10 +3,17 @@ import 'package:reimburse_mate/core/database/app_database.dart';
 import 'package:reimburse_mate/features/claims/data/claims_repository.dart';
 import 'package:uuid/uuid.dart';
 
-class EntryNotifier extends StateNotifier<bool> {
+class EntrySaveState {
+  final bool isSaving;
+  final String? errorMessage;
+
+  const EntrySaveState({this.isSaving = false, this.errorMessage});
+}
+
+class EntryNotifier extends StateNotifier<EntrySaveState> {
   final ClaimsRepository _repository;
 
-  EntryNotifier(this._repository) : super(false);
+  EntryNotifier(this._repository) : super(const EntrySaveState());
 
   Future<bool> saveClaim({
     required DateTime date,
@@ -26,7 +33,7 @@ class EntryNotifier extends StateNotifier<bool> {
     double? longitude,
     String? placeName,
   }) async {
-    state = true;
+    state = const EntrySaveState(isSaving: true);
     try {
       final now = DateTime.now();
       final claim = Reimbursement(
@@ -52,11 +59,17 @@ class EntryNotifier extends StateNotifier<bool> {
       );
 
       await _repository.insertClaim(claim);
-      state = false;
+      state = const EntrySaveState(isSaving: false);
       return true;
-    } catch (_) {
-      state = false;
+    } catch (e) {
+      state = EntrySaveState(isSaving: false, errorMessage: 'Could not save claim: $e');
       return false;
+    }
+  }
+
+  void clearError() {
+    if (state.errorMessage != null) {
+      state = const EntrySaveState();
     }
   }
 }

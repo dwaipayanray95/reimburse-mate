@@ -28,8 +28,38 @@ class ClaimDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Claim Details', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          'Claim Details',
+          style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, fontSize: 20),
+        ),
         actions: [
+          PopupMenuButton<ClaimStatus>(
+            icon: const Icon(Icons.flag_outlined),
+            tooltip: 'Change status',
+            onSelected: (newStatus) async {
+              await ref.read(claimsNotifierProvider.notifier).updateStatus(claim.id, newStatus);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Marked as ${newStatus.label}')),
+                );
+              }
+            },
+            itemBuilder: (context) => ClaimStatus.values
+                .where((s) => s != status)
+                .map(
+                  (s) => PopupMenuItem(
+                    value: s,
+                    child: Row(
+                      children: [
+                        Icon(s.icon, size: 18, color: s.color),
+                        const SizedBox(width: 10),
+                        Text('Mark as ${s.label}'),
+                      ],
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
           IconButton(
             icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
             onPressed: () async {
@@ -50,7 +80,7 @@ class ClaimDetailScreen extends ConsumerWidget {
 
               if (confirm == true && context.mounted) {
                 await ref.read(claimsNotifierProvider.notifier).deleteClaim(claim.id);
-                Navigator.pop(context);
+                if (context.mounted) Navigator.pop(context);
               }
             },
           ),
@@ -61,14 +91,16 @@ class ClaimDetailScreen extends ConsumerWidget {
         children: [
           // Amount & Project Display
           Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(18.0),
               child: Column(
                 children: [
                   Text(
                     currencyFmt.format(claim.amount ?? 0.0),
                     style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 28,
                       color: theme.colorScheme.primary,
                     ),
                   ),
@@ -179,12 +211,32 @@ class ClaimDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildAttachmentViewer(String path, bool isPdf) {
+    if (!File(path).existsSync()) {
+      return Container(
+        height: 120,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: Colors.grey.withOpacity(0.1),
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.broken_image_outlined, color: Colors.grey),
+              SizedBox(height: 6),
+              Text('File no longer available', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (isPdf) {
       return Container(
         height: 300,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFCBD5E1)),
+          border: Border.all(color: const Color(0x291A1B20)),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
@@ -199,6 +251,11 @@ class ClaimDetailScreen extends ConsumerWidget {
         File(path),
         fit: BoxFit.contain,
         width: double.infinity,
+        errorBuilder: (context, error, stackTrace) => Container(
+          height: 120,
+          color: Colors.grey.withOpacity(0.1),
+          child: const Center(child: Icon(Icons.broken_image_outlined, color: Colors.grey)),
+        ),
       ),
     );
   }

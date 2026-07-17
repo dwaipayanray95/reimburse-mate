@@ -1,6 +1,5 @@
 import 'package:drift/drift.dart';
 import 'package:reimburse_mate/core/database/app_database.dart';
-import 'package:uuid/uuid.dart';
 
 class ClaimsRepository {
   final AppDatabase _db;
