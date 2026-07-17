@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:reimburse_mate/core/providers.dart';
-import 'package:reimburse_mate/core/widgets/glass_card.dart';
 import 'subpages/user_info_page.dart';
 import 'subpages/filing_defaults_page.dart';
 import 'subpages/local_preferences_page.dart';
@@ -116,13 +116,21 @@ class SettingsScreen extends ConsumerWidget {
                       color: theme.colorScheme.primary,
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      'Version 1.0.7',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.primary,
-                      ),
+                    FutureBuilder<PackageInfo>(
+                      future: PackageInfo.fromPlatform(),
+                      builder: (context, snapshot) {
+                        final label = snapshot.hasData
+                            ? 'Version ${snapshot.data!.version} (${snapshot.data!.buildNumber})'
+                            : 'Version …';
+                        return Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.primary,
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),

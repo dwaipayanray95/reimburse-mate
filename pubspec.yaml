@@ -1,7 +1,7 @@
 name: reimburse_mate
 description: "Smart reimbursements, simplified."
 publish_to: 'none'
-version: 1.1.5+2
+version: 1.1.6+2
 
 environment:
   sdk: ^3.5.0
@@ -59,6 +59,7 @@ dependencies:
   shared_preferences: ^2.2.3
   collection: ^1.18.0
   permission_handler: ^11.3.0
+  package_info_plus: ^8.0.0
 
   cupertino_icons: ^1.0.8
 
