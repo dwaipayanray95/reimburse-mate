@@ -35,9 +35,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Container(
           decoration: BoxDecoration(
-            color: theme.brightness == Brightness.light
-                ? const Color(0xFFF2F3FA)
-                : const Color(0xFF1A1B1F),
+            // Bold, seed-derived tone straight from the M3 color engine
+            // (ColorScheme.fromSeed) instead of a flat hand-picked neutral.
+            color: theme.colorScheme.primaryContainer,
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(32),
               topRight: Radius.circular(32),
@@ -53,55 +53,22 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              NavigationBarTheme(
-                data: NavigationBarThemeData(
-                  height: 60,
-                  backgroundColor: Colors.transparent,
-                  indicatorColor: theme.brightness == Brightness.light
-                      ? const Color(0xFFDCE2FF)
-                      : const Color(0xFF293042),
-                  indicatorShape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  surfaceTintColor: Colors.transparent,
-                  elevation: 0,
-                  iconTheme: WidgetStateProperty.resolveWith((states) {
-                    return IconThemeData(
-                      size: 22,
-                      color: states.contains(WidgetState.selected)
-                          ? theme.colorScheme.onSurface
-                          : theme.colorScheme.onSurface.withOpacity(0.55),
-                    );
-                  }),
-                  labelTextStyle: WidgetStateProperty.resolveWith((states) {
-                    return TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: states.contains(WidgetState.selected)
-                          ? theme.colorScheme.onSurface
-                          : theme.colorScheme.onSurface.withOpacity(0.55),
-                    );
-                  }),
-                ),
-                child: NavigationBar(
-                  height: 60,
-                  backgroundColor: Colors.transparent,
-                  selectedIndex: _currentIndex,
-                  onDestinationSelected: (index) {
-                    setState(() {
-                      _currentIndex = index;
-                    });
-                  },
-                  destinations: const [
-                    NavigationDestination(
-                      icon: Icon(Icons.dashboard_outlined),
-                      selectedIcon: Icon(Icons.dashboard_rounded),
-                      label: 'Dashboard',
+              const SizedBox(height: 14),
+              SizedBox(
+                height: 72,
+                child: Row(
+                  children: [
+                    _NavItem(
+                      icon: Icons.dashboard_outlined,
+                      selectedIcon: Icons.dashboard_rounded,
+                      isSelected: _currentIndex == 0,
+                      onTap: () => setState(() => _currentIndex = 0),
                     ),
-                    NavigationDestination(
-                      icon: Icon(Icons.receipt_long_outlined),
-                      selectedIcon: Icon(Icons.receipt_long_rounded),
-                      label: 'Claims',
+                    _NavItem(
+                      icon: Icons.receipt_long_outlined,
+                      selectedIcon: Icons.receipt_long_rounded,
+                      isSelected: _currentIndex == 1,
+                      onTap: () => setState(() => _currentIndex = 1),
                     ),
                   ],
                 ),
@@ -128,6 +95,54 @@ class _HomeScreenState extends State<HomeScreen> {
         foregroundColor: theme.colorScheme.onPrimary,
         elevation: 6,
         child: const Icon(Icons.add_rounded),
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final IconData selectedIcon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _NavItem({
+    required this.icon,
+    required this.selectedIcon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 60,
+              height: 48,
+              decoration: BoxDecoration(
+                color: isSelected ? theme.colorScheme.primary : Colors.transparent,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Center(
+                child: Icon(
+                  isSelected ? selectedIcon : icon,
+                  size: 28,
+                  color: isSelected
+                      ? theme.colorScheme.onPrimary
+                      : theme.colorScheme.onPrimaryContainer.withOpacity(0.6),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
