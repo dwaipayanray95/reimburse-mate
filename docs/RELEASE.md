@@ -91,16 +91,44 @@ signing key**, which is what stays stable across all future updates.
    `flutter install --release` or sideload the built APK
 6. Upload the `.aab` to the appropriate Play Console track (Internal testing first for
    anything non-trivial, promote to Production once verified)
-7. Tag the release in git: `git tag v1.1.5 && git push --tags`
+7. Tag the release in git: `git tag v1.1.5 && git push --tags` — this triggers
+   `.github/workflows/release.yml` automatically (see below)
 
-## CI (planned)
+## CI
 
-Not yet set up. The intended shape: a GitHub Actions workflow triggered on
-`v*` tag pushes that runs `flutter analyze`, then `flutter build appbundle --release`
-using a base64-encoded upload keystore + passwords stored as GitHub Encrypted
-Secrets, and attaches the resulting `.aab` as a workflow artifact (manual upload to
-Play Console for now; automating the actual Play Console upload via the Play
-Developer API/fastlane can come later once the manual process is proven a few times).
+Two workflows, vendored (with modifications) from
+[ez-github-scripts](https://github.com/dwaipayanray95/ez-github-scripts) — see
+`.github/actions/README.md` for what was and wasn't brought in and why.
+
+**`.github/workflows/pr-checks.yml`** — runs on every PR:
+- `flutter analyze` + `flutter test`
+- License Guard (informational only — doesn't block the PR, just reports)
+- Security Scan (greps the diff for leaked-credential patterns)
+- PR size labeling
+
+**`.github/workflows/release.yml`** — runs on any `v*` tag push:
+- Security Scan and License Guard (both **blocking** here — a release build won't
+  proceed if either fails)
+- Builds and signs a release App Bundle (`flutter build appbundle --release`),
+  attached to the workflow run as a downloadable artifact
+
+**Required repository secrets** for `release.yml` to actually sign the build (Settings
+→ Secrets and variables → Actions), matching the upload keystore generated per the
+"App signing" section above:
+
+| Secret | Value |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | `base64 -i upload-keystore.jks` output |
+| `ANDROID_KEYSTORE_PASSWORD` | Your keystore password |
+| `ANDROID_KEY_ALIAS` | `upload` (or whatever alias you used) |
+| `ANDROID_KEY_PASSWORD` | Your key password |
+
+Without these secrets set, `release.yml` will still build an **unsigned** AAB rather
+than failing outright — don't upload an unsigned build to Play Console.
+
+The actual Play Console upload is still manual (download the artifact from the
+workflow run, upload it yourself) — automating that via the Play Developer API or
+fastlane can come later once the manual process is proven a few times.
 
 ## Play Console housekeeping
 

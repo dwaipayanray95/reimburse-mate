@@ -1,0 +1,55 @@
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  analyze-test-and-license:
+    name: Analyze, Test & License Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Get Pub Dependencies
+        run: flutter pub get
+
+      - name: Run Code Analysis
+        run: flutter analyze
+
+      - name: Run Unit/Widget Tests
+        run: flutter test
+
+      # License Guard needs pubspec.lock + a populated pub-cache, both of
+      # which only exist after `flutter pub get` — must run in this job,
+      # not a separate one without a Flutter/Dart toolchain.
+      - name: License Guard (informational only)
+        uses: ./.github/actions/license-guard
+        with:
+          fail-on-violation: 'false'
+
+  pr-metadata:
+    name: PR Size & Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: PR Pilot Size Labeler
+        uses: ./.github/actions/pr-pilot
+
+      - name: Security Scan
+        uses: ./.github/actions/security-scan

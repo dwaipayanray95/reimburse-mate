@@ -1,0 +1,69 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Security Scan
+        uses: ./.github/actions/security-scan
+
+  license-check:
+    name: License Guard (blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Get Pub Dependencies
+        run: flutter pub get
+
+      # License Guard needs pubspec.lock + a populated pub-cache — both
+      # only exist after `flutter pub get`.
+      - name: License Guard
+        uses: ./.github/actions/license-guard
+        with:
+          fail-on-violation: 'true'
+
+  build-android:
+    name: Build Signed Android App Bundle
+    needs: [security-scan, license-check]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build & Sign AAB
+        uses: ./.github/actions/flutter-build
+        with:
+          platform: 'android-aab'
+          run-tests: 'true'
+          run-analyze: 'true'
+          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      # flutter-build uploads the .aab as a workflow artifact automatically —
+      # download it from the run and upload to Play Console manually for now.
+      # Automating the Play Console upload itself (Play Developer API /
+      # fastlane) can come later once the manual process is proven.

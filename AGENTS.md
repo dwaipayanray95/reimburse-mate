@@ -36,9 +36,15 @@ flutter run -d <device-id>   # run on a connected device/emulator
 flutter devices              # list available targets
 ```
 
-There is no meaningful automated test suite yet (`test/` is effectively unused) — verifying
-a change means running the app on a real device/emulator and exercising the affected flow.
-`flutter analyze` catches compile errors and lints but does **not** catch logic bugs.
+There is no meaningful automated test suite yet (`test/` has a single default widget
+test) — verifying a change means running the app on a real device/emulator and
+exercising the affected flow. `flutter analyze` catches compile errors and lints but
+does **not** catch logic bugs.
+
+CI runs on every PR (`.github/workflows/pr-checks.yml`: analyze, test, license check,
+security scan, PR size label) and on every `v*` tag push
+(`.github/workflows/release.yml`: blocking security/license checks, then a signed
+release build) — see `docs/RELEASE.md`.
 
 ### Running on device notes
 

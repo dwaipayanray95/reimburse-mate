@@ -1,7 +1,7 @@
 name: reimburse_mate
 description: "Smart reimbursements, simplified."
 publish_to: 'none'
-version: 1.1.6+2
+version: 1.1.7+2
 
 environment:
   sdk: ^3.5.0
