@@ -1,229 +1,134 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:currency_picker/currency_picker.dart';
 import 'package:reimburse_mate/core/providers.dart';
 import 'package:reimburse_mate/core/widgets/glass_card.dart';
+import 'subpages/user_info_page.dart';
+import 'subpages/filing_defaults_page.dart';
+import 'subpages/local_preferences_page.dart';
 
-class SettingsScreen extends ConsumerStatefulWidget {
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
-  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final settings = ref.watch(settingsProvider);
 
-class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  final _emailController = TextEditingController();
-  final _bodyController = TextEditingController();
-  final _nameController = TextEditingController();
-  final _companyController = TextEditingController();
-  String _currency = 'INR';
-
-
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _bodyController.dispose();
-    _nameController.dispose();
-    _companyController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _saveSettings() async {
-    final notifier = ref.read(settingsProvider.notifier);
-    await notifier.updateRecipientEmail(_emailController.text.trim());
-    await notifier.updateEmailBody(_bodyController.text.trim());
-    await notifier.updateUserName(_nameController.text.trim());
-    await notifier.updateCompanyName(_companyController.text.trim());
-    await notifier.updateDefaultCurrency(_currency);
-    await notifier.updateThemeMode(_selectedThemeMode);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Settings saved successfully!')),
-      );
-      Navigator.pop(context);
-    }
-  }
-
-  String _selectedThemeMode = 'system';
-
-  @override
-  void initState() {
-    super.initState();
-    final settings = ref.read(settingsProvider);
-    _emailController.text = settings.recipientEmail;
-    _bodyController.text = settings.emailBody;
-    _nameController.text = settings.userName;
-    _companyController.text = settings.companyName;
-    _currency = settings.defaultCurrency;
-    _selectedThemeMode = settings.themeMode;
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.check_rounded),
-            onPressed: _saveSettings,
-          ),
-        ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16.0),
+      body: Column(
         children: [
-          // Profile Setup Card
-          _sectionCard(
-            context,
-            title: 'User Information',
-            children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: _fieldDecoration(context, 'Your Name'),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _companyController,
-                decoration: _fieldDecoration(context, 'Company / Project Name'),
-              ),
-            ],
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(16.0),
+              children: [
+                // Settings List Cards
+                Card(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.person_rounded, color: theme.colorScheme.primary),
+                        ),
+                        title: const Text('User Information', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: Text('${settings.userName} · ${settings.companyName}', style: const TextStyle(fontSize: 12)),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const UserInfoPage()),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.forward_to_inbox_rounded, color: theme.colorScheme.primary),
+                        ),
+                        title: const Text('Filing Defaults', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: Text(settings.recipientEmail, style: const TextStyle(fontSize: 12)),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const FilingDefaultsPage()),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.tune_rounded, color: theme.colorScheme.primary),
+                        ),
+                        title: const Text('Local Preferences', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: Text('Currency: ${settings.defaultCurrency} · Theme: ${settings.themeMode.toUpperCase()}', style: const TextStyle(fontSize: 12)),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const LocalPreferencesPage()),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
 
-          // Email defaults
-          _sectionCard(
-            context,
-            title: 'Filing Defaults',
-            children: [
-              TextFormField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: _fieldDecoration(context, 'Recipient Email Address', hint: 'accounts@company.com'),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _bodyController,
-                maxLines: 4,
-                decoration: _fieldDecoration(context, 'Default Email Body Template'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Local configuration
-          _sectionCard(
-            context,
-            title: 'Local Preferences',
-            children: [
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Default Currency'),
-                trailing: Row(
+          // Version Tag at the Bottom
+          Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: theme.colorScheme.primary.withOpacity(0.2),
+                  ),
+                ),
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(_currency, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const Icon(Icons.arrow_drop_down_rounded),
+                    Icon(
+                      Icons.info_outline_rounded,
+                      size: 14,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Version 1.0.7',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
                   ],
                 ),
-                onTap: () {
-                  showCurrencyPicker(
-                    context: context,
-                    onSelect: (Currency currency) {
-                      setState(() {
-                        _currency = currency.code;
-                      });
-                    },
-                  );
-                },
               ),
-              const Divider(),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Appearance'),
-                trailing: _themeToggle(context),
-              ),
-            ],
+            ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sectionCard(BuildContext context, {required String title, required List<Widget> children}) {
-    return GlassCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-          const SizedBox(height: 12),
-          ...children,
-        ],
-      ),
-    );
-  }
-
-  InputDecoration _fieldDecoration(BuildContext context, String label, {String? hint}) {
-    final theme = Theme.of(context);
-    return InputDecoration(
-      labelText: label,
-      hintText: hint,
-      filled: true,
-      fillColor: theme.colorScheme.surface,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: theme.colorScheme.outline),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: theme.colorScheme.outline),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
-      ),
-    );
-  }
-
-  Widget _themeToggle(BuildContext context) {
-    final theme = Theme.of(context);
-    Widget segment(String mode, IconData icon) {
-      final isSelected = _selectedThemeMode == mode;
-      return InkWell(
-        onTap: () async {
-          setState(() => _selectedThemeMode = mode);
-          await ref.read(settingsProvider.notifier).updateThemeMode(mode);
-        },
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: isSelected ? theme.colorScheme.primary : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(
-            icon,
-            size: 18,
-            color: isSelected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface.withOpacity(0.6),
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          segment('system', Icons.brightness_auto_rounded),
-          segment('light', Icons.light_mode_rounded),
-          segment('dark', Icons.dark_mode_rounded),
         ],
       ),
     );

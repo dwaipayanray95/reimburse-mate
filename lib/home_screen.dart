@@ -55,19 +55,19 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               NavigationBarTheme(
                 data: NavigationBarThemeData(
-                  height: 96,
+                  height: 60,
                   backgroundColor: Colors.transparent,
                   indicatorColor: theme.brightness == Brightness.light
                       ? const Color(0xFFDCE2FF)
                       : const Color(0xFF293042),
                   indicatorShape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   surfaceTintColor: Colors.transparent,
                   elevation: 0,
                   iconTheme: WidgetStateProperty.resolveWith((states) {
                     return IconThemeData(
-                      size: 26,
+                      size: 22,
                       color: states.contains(WidgetState.selected)
                           ? theme.colorScheme.onSurface
                           : theme.colorScheme.onSurface.withOpacity(0.55),
@@ -75,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   }),
                   labelTextStyle: WidgetStateProperty.resolveWith((states) {
                     return TextStyle(
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                       color: states.contains(WidgetState.selected)
                           ? theme.colorScheme.onSurface
@@ -84,7 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   }),
                 ),
                 child: NavigationBar(
-                  height: 96,
+                  height: 60,
                   backgroundColor: Colors.transparent,
                   selectedIndex: _currentIndex,
                   onDestinationSelected: (index) {

@@ -20,7 +20,10 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 24
-        targetSdk = 34
+        // Must be 35+ so Android 15+ trusts the app to handle edge-to-edge
+        // itself instead of painting a solid black safety scrim behind the
+        // status/nav bars over our transparent SystemUiOverlayStyle.
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
