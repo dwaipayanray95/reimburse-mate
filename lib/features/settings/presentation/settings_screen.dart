@@ -5,6 +5,7 @@ import 'package:reimburse_mate/core/providers.dart';
 import 'subpages/user_info_page.dart';
 import 'subpages/filing_defaults_page.dart';
 import 'subpages/local_preferences_page.dart';
+import 'subpages/privacy_policy_page.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -87,6 +88,26 @@ class SettingsScreen extends ConsumerWidget {
                           );
                         },
                       ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.privacy_tip_rounded, color: theme.colorScheme.primary),
+                        ),
+                        title: const Text('Privacy Policy', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: const Text('What data this app touches and where it goes', style: TextStyle(fontSize: 12)),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const PrivacyPolicyPage()),
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -120,7 +141,7 @@ class SettingsScreen extends ConsumerWidget {
                       future: PackageInfo.fromPlatform(),
                       builder: (context, snapshot) {
                         final label = snapshot.hasData
-                            ? 'Version ${snapshot.data!.version} (${snapshot.data!.buildNumber})'
+                            ? 'Version ${snapshot.data!.version}'
                             : 'Version …';
                         return Text(
                           label,

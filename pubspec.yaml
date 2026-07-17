@@ -1,7 +1,7 @@
 name: reimburse_mate
 description: "Smart reimbursements, simplified."
 publish_to: 'none'
-version: 1.1.7+2
+version: 1.1.9+2
 
 environment:
   sdk: ^3.5.0
@@ -62,6 +62,7 @@ dependencies:
   package_info_plus: ^8.0.0
 
   cupertino_icons: ^1.0.8
+  flutter_markdown: ^0.7.7+1
 
 dev_dependencies:
   flutter_test:
@@ -75,3 +76,4 @@ flutter:
   assets:
     - assets/images/
     - assets/animations/
+    - docs/PRIVACY_POLICY.md

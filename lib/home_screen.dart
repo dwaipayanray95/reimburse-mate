@@ -118,26 +118,24 @@ class _NavItem extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          child: Center(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 60,
-              height: 48,
-              decoration: BoxDecoration(
-                color: isSelected ? theme.colorScheme.primary : Colors.transparent,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Center(
+      child: Center(
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: AnimatedScale(
+                duration: const Duration(milliseconds: 200),
+                scale: isSelected ? 1.1 : 1.0,
                 child: Icon(
                   isSelected ? selectedIcon : icon,
                   size: 28,
                   color: isSelected
-                      ? theme.colorScheme.onPrimary
-                      : theme.colorScheme.onPrimaryContainer.withOpacity(0.6),
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onPrimaryContainer.withOpacity(0.5),
                 ),
               ),
             ),
