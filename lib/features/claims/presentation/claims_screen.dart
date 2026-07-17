@@ -5,10 +5,8 @@ import 'package:reimburse_mate/core/providers.dart';
 import 'package:reimburse_mate/core/widgets/empty_state.dart';
 import 'package:reimburse_mate/features/claims/application/filter_notifier.dart';
 import 'package:reimburse_mate/features/claims/presentation/claim_detail_screen.dart';
-import 'package:reimburse_mate/features/filing/presentation/file_claims_screen.dart';
 import 'widgets/claim_list_tile.dart';
 import 'widgets/filter_bar.dart';
-import 'widgets/multi_select_action_bar.dart';
 
 class ClaimsScreen extends ConsumerWidget {
   const ClaimsScreen({super.key});
@@ -141,87 +139,38 @@ class ClaimsScreen extends ConsumerWidget {
                   );
                 }
 
-                return Stack(
-                  children: [
-                    ListView.builder(
-                      itemCount: filtered.length,
-                      padding: const EdgeInsets.only(bottom: 80),
-                      itemBuilder: (context, index) {
-                        final item = filtered[index];
-                        final isSelected = selectState.selectedIds.contains(item.id);
+                // The multi-select action bar (count, delete, File Claims)
+                // lives in HomeScreen's bottom nav bar now — it morphs into
+                // the selection toolbar instead of floating a second bar
+                // above it. See HomeScreen's bottomNavigationBar.
+                return ListView.builder(
+                  itemCount: filtered.length,
+                  padding: const EdgeInsets.only(bottom: 16),
+                  itemBuilder: (context, index) {
+                    final item = filtered[index];
+                    final isSelected = selectState.selectedIds.contains(item.id);
 
-                        return ClaimListTile(
-                          item: item,
-                          isSelected: isSelected,
-                          isMultiSelectActive: selectState.isMultiSelectMode,
-                          onLongPress: () {
-                            ref.read(multiSelectProvider.notifier).toggle(item.id);
-                          },
-                          onTap: () {
-                            if (selectState.isMultiSelectMode) {
-                              ref.read(multiSelectProvider.notifier).toggle(item.id);
-                            } else {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ClaimDetailScreen(claim: item),
-                                ),
-                              );
-                            }
-                          },
-                        );
+                    return ClaimListTile(
+                      item: item,
+                      isSelected: isSelected,
+                      isMultiSelectActive: selectState.isMultiSelectMode,
+                      onLongPress: () {
+                        ref.read(multiSelectProvider.notifier).toggle(item.id);
                       },
-                    ),
-
-                    // Slide up action bar
-                    if (selectState.selectedIds.isNotEmpty)
-                      Positioned(
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        child: MultiSelectActionBar(
-                          count: selectState.selectedIds.length,
-                          onClear: () => ref.read(multiSelectProvider.notifier).clearSelection(),
-                          onBatchDelete: () async {
-                            final confirm = await showDialog<bool>(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text('Delete entries?'),
-                                content: Text('Do you want to permanently remove ${selectState.selectedIds.length} items?'),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context, false),
-                                    child: const Text('Cancel'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context, true),
-                                    child: const Text('Delete', style: TextStyle(color: Colors.red)),
-                                  ),
-                                ],
-                              ),
-                            );
-
-                            if (confirm == true) {
-                              await ref.read(claimsNotifierProvider.notifier).batchDelete(selectState.selectedIds.toList());
-                              ref.read(multiSelectProvider.notifier).clearSelection();
-                            }
-                          },
-                          onFileClaims: () {
-                            final selectedClaims = claims
-                                .where((c) => selectState.selectedIds.contains(c.id))
-                                .toList();
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => FileClaimsScreen(claims: selectedClaims),
-                              ),
-                            ).then((_) {
-                              ref.read(multiSelectProvider.notifier).clearSelection();
-                            });
-                          },
-                        ),
-                      ),
-                  ],
+                      onTap: () {
+                        if (selectState.isMultiSelectMode) {
+                          ref.read(multiSelectProvider.notifier).toggle(item.id);
+                        } else {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ClaimDetailScreen(claim: item),
+                            ),
+                          );
+                        }
+                      },
+                    );
+                  },
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
